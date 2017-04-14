@@ -1,19 +1,18 @@
-﻿using TheLang.AST.Types;
+﻿using TheLang.AST.Expressions;
 using TheLang.Syntax;
 
 namespace TheLang.AST.Statments
 {
     public class Declaration : Node
     {
-        public Declaration(Position position, string name, TypeNode declaredType) 
+        public Declaration(Position position, string name) 
             : base(position)
         {
             Name = name;
-            DeclaredType = declaredType;
         }
 
         public string Name { get; set; }
-        public TypeNode DeclaredType { get; set; }
+        public Expression DeclaredType { get; set; }
 
         public override bool Accept(IVisitor visitor) => visitor.Visit(this);
     }

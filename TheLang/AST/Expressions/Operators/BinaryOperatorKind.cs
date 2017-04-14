@@ -6,19 +6,24 @@
         // The last four bits are used to make sure operators are uniquely represented.
         Dot = 0x00,
 
-        Times = 0x10,
-        Divide = 0x11,
-        Modulo = 0x12,
+        As = 0x10,
 
-        Plus = 0x20,
-        Minus = 0x21,
+        Times = 0x20,
+        Divide = 0x21,
+        Modulo = 0x22,
 
-        LessThan = 0x30,
-        LessThanEqual = 0x31,
-        GreaterThan = 0x32,
-        GreaterThanEqual = 0x33,
+        Plus = 0x30,
+        Minus = 0x31,
 
-        EqualEqual = 0x40,
-        ExclamationMarkEqual = 0x41
+        LessThan = 0x40,
+        LessThanEqual = 0x41,
+        GreaterThan = 0x42,
+        GreaterThanEqual = 0x43,
+
+        Equal = 0x50,
+        NotEqual = 0x51,
+
+        And = 0x60,
+        Or = 0x61
     }
 }

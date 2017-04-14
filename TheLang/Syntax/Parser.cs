@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
 using TheLang.AST;
 using TheLang.AST.Expressions;
+using TheLang.AST.Expressions.Literals;
 using TheLang.AST.Expressions.Operators;
 using TheLang.AST.Statments;
 using TheLang.AST.Types;
@@ -141,8 +144,8 @@ namespace TheLang.Syntax
         /// <summary>
         /// 
         /// 
-        /// identifier : maybe(type) = something
-        /// identifier : maybe(type) : something
+        /// identifier : type? = something
+        /// identifier : type? : something
         /// </summary>
         /// <param name="result"></param>
         /// <returns></returns>
@@ -218,7 +221,7 @@ namespace TheLang.Syntax
 
                 case TokenKind.SquareLeft:
                     var dimensions = 1;
-                    while (TryEatToken(TokenKind.Comma, out Token comman))
+                    while (TryEatToken(TokenKind.Comma, out Token comma))
                         dimensions++;
 
                     if (TryEatToken(TokenKind.SquareRight, out Token expectedSquareRight))
@@ -327,29 +330,13 @@ namespace TheLang.Syntax
             
             for (;;)
             {
-                BinaryOperator op = null;
+                BinaryOperator op;
                 var peek = PeekToken();
-
-                // This switch only checks if the cast actually maps to any BinaryOperatorKind
-                switch ((BinaryOperatorKind)peek.Kind)
-                {
-                    case BinaryOperatorKind.Dot:
-                    case BinaryOperatorKind.Times:
-                    case BinaryOperatorKind.Divide:
-                    case BinaryOperatorKind.Modulo:
-                    case BinaryOperatorKind.Plus:
-                    case BinaryOperatorKind.Minus:
-                    case BinaryOperatorKind.LessThan:
-                    case BinaryOperatorKind.LessThanEqual:
-                    case BinaryOperatorKind.GreaterThan:
-                    case BinaryOperatorKind.GreaterThanEqual:
-                    case BinaryOperatorKind.EqualEqual:
-                    case BinaryOperatorKind.ExclamationMarkEqual:
-                        op = new BinaryOperator(peek.Position) { Kind = (BinaryOperatorKind)peek.Kind };
-                        break;
-                }
-
-                if (op == null)
+                
+                // Check if next token is a binary operator
+                if (IsBinaryOperator(peek.Kind))
+                    op = new BinaryOperator(peek.Position, (BinaryOperatorKind)peek.Kind);
+                else
                     break;
 
                 EatToken();
@@ -378,7 +365,127 @@ namespace TheLang.Syntax
 
         private bool TryParseTerm(out Expression result)
         {
-            throw new NotImplementedException();
+            var peek = PeekToken();
+
+            result = null;
+            UnaryOperator unary = null;
+            if (IsUnaryOperator(peek.Kind))
+            {
+                unary = new UnaryOperator(peek.Position, (UnaryOperatorKind)peek.Kind);
+                result = unary;
+
+                while (IsUnaryOperator(peek.Kind))
+                {
+                    unary.Child = new UnaryOperator(peek.Position, (UnaryOperatorKind)peek.Kind);
+                    unary = (UnaryOperator)unary.Child;
+                }
+            }
+
+            if (!TryParseLiteralOrSymbol(out Expression leaf))
+                return false;
+
+            var parsingPostfix = true;
+            
+            do
+            {
+                switch (peek.Kind)
+                {
+                    case TokenKind.CurlyLeft:
+                    {
+                        EatToken();
+                        var assignments = new List<Assignment>();
+                        var isLast = false;
+
+                        while (!isLast && TryEatToken(TokenKind.Identifier, out peek))
+                        {
+                            var left = new Symbol(peek.Position, peek.Value);
+
+                            if (!TryEatToken(TokenKind.Equal, out peek))
+                            {
+                                // TODO: Error message
+                                _compiler.ReportError(peek.Position, "");
+                                return false;
+                            }
+
+                            if (!TryParseExpression(out Expression right))
+                                return false;
+
+                            assignments.Add(new Assignment(left.Position) { Left = left, Right = right });
+
+                            if (!TryEatToken(TokenKind.Comma, out peek))
+                                isLast = true;
+                        }
+
+                        if (!TryEatToken(TokenKind.CurlyRight, out peek))
+                        {
+                            // TODO: Error message
+                            _compiler.ReportError(peek.Position, "");
+                            return false;
+                        }
+
+                        leaf = new CompositTypeLiteral(leaf.Position) { Type = leaf, Values = assignments };
+                        break;
+                    }
+                    case TokenKind.ParenthesesLeft:
+                    {
+                        EatToken();
+                        var arguments = new List<Expression>();
+
+                        if (TryEatToken(TokenKind.ParenthesesRight, out peek))
+                        {
+                            leaf = new Call(leaf.Position) { Callee = leaf, Arguments = arguments };
+                            break;
+                        }
+
+                        peek = PeekToken();
+
+                        // TODO: Parse arguments
+
+                        leaf = new Call(leaf.Position) { Callee = leaf, Arguments = arguments };
+                        break;
+                    }
+                    case TokenKind.SquareLeft:
+                    {
+
+                        break;
+                    }
+                    default:
+                        parsingPostfix = false;
+                        break;
+                }
+            } while (parsingPostfix);
+
+
+            if (unary != null)
+                unary.Child = leaf;
+            else
+                result = leaf;
+
+            return true;
+        }
+
+        private bool TryParseLiteralOrSymbol(out Expression result)
+        {
+            var token = EatToken();
+
+            switch (token.Kind)
+            {
+                case TokenKind.Identifier:
+                    result = new Symbol(token.Position, token.Value);
+                    return true;
+                case TokenKind.FloatNumber:
+                    result = new FloatLiteral(token.Position, double.Parse(token.Value));
+                    return true;
+                case TokenKind.DecimalNumber:
+                    result = new IntegerLiteral(token.Position, int.Parse(token.Value));
+                    return true;
+                default:
+                    result = null;
+
+                    // TODO: Error message
+                    _compiler.ReportError(token.Position, "");
+                    return false;
+            }
         }
 
         private void InitParser()
@@ -419,6 +526,18 @@ namespace TheLang.Syntax
 
             EatToken();
             return true;
+        }
+
+        private bool IsBinaryOperator(TokenKind kind)
+        {
+            var operators = (BinaryOperatorKind[])Enum.GetValues(typeof(BinaryOperatorKind));
+            return operators.Contains((BinaryOperatorKind)kind);
+        }
+
+        private bool IsUnaryOperator(TokenKind kind)
+        {
+            var operators = (UnaryOperatorKind[])Enum.GetValues(typeof(UnaryOperatorKind));
+            return operators.Contains((UnaryOperatorKind)kind);
         }
     }
 }

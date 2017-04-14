@@ -6,26 +6,35 @@ namespace TheLang.Syntax
     {
         Identifier,
         FloatNumber,
-        DotFloatNumber,
         DecimalNumber,
 
-        KeywordAs,
         KeywordStruct,
-        KeywordAnd,
-        KeywordOr,
+        KeywordProcedure,
+        KeywordFunction,
 
         // Binary operators
         Plus = BinaryOperatorKind.Plus,
         Minus = BinaryOperatorKind.Minus,
         Times = BinaryOperatorKind.Times,
         Divide = BinaryOperatorKind.Divide,
-        EqualEqual = BinaryOperatorKind.EqualEqual,
+        EqualEqual = BinaryOperatorKind.Equal,
         Modulo = BinaryOperatorKind.Modulo,
         LessThan = BinaryOperatorKind.LessThan,
         LessThanEqual = BinaryOperatorKind.LessThanEqual,
         GreaterThan = BinaryOperatorKind.GreaterThan,
         GreaterThanEqual = BinaryOperatorKind.GreaterThanEqual,
-        ExclamationMarkEqual = BinaryOperatorKind.ExclamationMarkEqual,
+        ExclamationMarkEqual = BinaryOperatorKind.NotEqual,
+        KeywordAnd = BinaryOperatorKind.And,
+        KeywordOr = BinaryOperatorKind.Or,
+        KeywordAs = BinaryOperatorKind.As,
+        Dot = BinaryOperatorKind.Dot,
+
+        // Unary operators
+        ExclamationMark = UnaryOperatorKind.Not,
+        At = UnaryOperatorKind.Reference,
+        SAt = UnaryOperatorKind.SharedReference,
+        UAt = UnaryOperatorKind.UniqueReference,
+        Tilde = UnaryOperatorKind.Dereference,
 
         // Assignements
         PlusEqual,
@@ -34,24 +43,11 @@ namespace TheLang.Syntax
         DivideEqual,
         ModulusEqual,
         Equal,
-
-
+        
         Exponent,
         ExponentEqual,
 
-        ExclamationMark,
-
         Arrow,
-
-        Not,
-
-        At,
-        SAt,
-        UAt,
-        
-        Tilde,
-
-        Dot,
 
         SquareLeft,
         SquareRight,
@@ -66,9 +62,7 @@ namespace TheLang.Syntax
         SemiColon,
         Comma,
 
-        Unknown,
         EndOfFile,
-        KeywordProcedure,
-        KeywordFunction,
+        Unknown,
     }
 }
