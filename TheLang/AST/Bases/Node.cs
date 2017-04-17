@@ -1,6 +1,7 @@
-﻿using TheLang.Syntax;
+﻿using TheLang.Semantics.TypeChecking.Types;
+using TheLang.Syntax;
 
-namespace TheLang.AST
+namespace TheLang.AST.Bases
 {
     public abstract class Node
     {
@@ -10,7 +11,6 @@ namespace TheLang.AST
         }
 
         public Position Position { get; }
-
-        public abstract bool Accept(IVisitor visitor);
+        public Type Type { get; set; }
     }
 }

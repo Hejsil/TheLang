@@ -1,8 +1,9 @@
-﻿using TheLang.Syntax;
+﻿using TheLang.AST.Bases;
+using TheLang.Syntax;
 
 namespace TheLang.AST.Expressions.Literals
 {
-    public class FloatLiteral : Expression
+    public class FloatLiteral : Node
     {
         public FloatLiteral(Position position, double value) 
             : base(position)
@@ -11,7 +12,5 @@ namespace TheLang.AST.Expressions.Literals
         }
 
         public double Value { get; set; }
-
-        public override bool Accept(IVisitor visitor) => visitor.Visit(this);
     }
 }

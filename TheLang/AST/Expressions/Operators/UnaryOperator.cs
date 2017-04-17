@@ -1,19 +1,16 @@
-﻿using TheLang.Syntax;
+﻿using TheLang.AST.Bases;
+using TheLang.Syntax;
 
 namespace TheLang.AST.Expressions.Operators
 {
-    public class UnaryOperator : Expression
+    public class UnaryOperator : UnaryNode
     {
         public UnaryOperator(Position position, UnaryOperatorKind kind) 
             : base(position)
         {
             Kind = kind;
         }
-
-
-        public Expression Child { get; set; }
-        public UnaryOperatorKind Kind { get; set; }
         
-        public override bool Accept(IVisitor visitor) => visitor.Visit(this);
+        public UnaryOperatorKind Kind { get; set; }
     }
 }

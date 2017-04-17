@@ -1,349 +1,129 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using TheLang.AST;
+using TheLang.AST.Bases;
 using TheLang.AST.Expressions;
 using TheLang.AST.Expressions.Literals;
 using TheLang.AST.Expressions.Operators;
 using TheLang.AST.Statments;
-using TheLang.AST.Types;
 
 namespace TheLang.Syntax
 {
     public class Parser
     {
-        private HashSet<string> _filesInProject;
-        private Queue<string> _filesToCompile;
-        private Scanner _currentScanner;
-
         private readonly Compiler _compiler;
+        private readonly Scanner _scanner;
 
-        public Parser(Compiler compiler)
+        public Parser(Scanner scanner, Compiler compiler)
         {
             _compiler = compiler;
+            _scanner = scanner;
         }
 
-        public bool TryParseProgram(TextReader stream, out Program result)
-        {
-            InitParser(stream);
-            return TryParseProgram(out result);
-        }
-
-        public bool TryParseProgram(string fileName, out Program result)
-        {
-            InitParser(fileName);
-            return TryParseProgram(out result);
-        }
-
-        public bool TryParseDeclaration(TextReader stream, out Declaration result)
-        {
-            InitParser(stream);
-            return TryParseDeclaration(out result);
-        }
-
-        public bool TryParseDeclaration(string fileName, out Declaration result)
-        {
-            InitParser(fileName);
-            return TryParseDeclaration(out result);
-        }
-
-        public bool TryParseType(TextReader stream, out TypeNode result)
-        {
-            InitParser(stream);
-            return TryParseType(out result);
-        }
-
-        public bool TryParseType(string fileName, out TypeNode result)
-        {
-            InitParser(fileName);
-            return TryParseType(out result);
-        }
-
-        public bool TryParseExpression(TextReader stream, out Expression result)
-        {
-            InitParser(stream);
-            return TryParseExpression(out result);
-        }
-
-        public bool TryParseExpression(string fileName, out Expression result)
-        {
-            InitParser(fileName);
-            return TryParseExpression(out result);
-        }
-
-        private bool TryParseProgram(out Program result)
+        public bool TryParseProgram(out FileNode result)
         {
             result = null;
 
-            var running = true;
             var declarations = new List<Node>();
+            var start = PeekToken();
 
-            do
+            while (!TryEatToken(TokenKind.EndOfFile, out var peek))
             {
-                var next = PeekToken();
-                switch (next.Kind)
+                if (peek.Kind == TokenKind.Identifier)
                 {
-                    // If EndOfFile, then we need to load in a new scanner
-                    case TokenKind.EndOfFile:
-                        do
-                        {
-                            if (_filesToCompile.Count == 0)
-                            {
-                                running = false;
-                                break;
-                            }
-
-                            _currentScanner = new Scanner(_filesToCompile.Dequeue());
-                        } while (PeekIs(TokenKind.EndOfFile));
-                        break;
-
-                    // Else, the only this allowed in the grobal scope, for now, is a declaration
-                    case TokenKind.Identifier:
-                        if (TryParseDeclaration(out Declaration declaration))
-                        {
-                            next = PeekToken();
-                            switch (next.Kind)
-                            {
-                                case TokenKind.Equal:
-                                case TokenKind.Colon:
-                                    if (TryParseExpression(out Expression expression))
-                                    {
-                                        declarations.Add(new Variable(next.Position, declaration, expression,
-                                            next.Kind == TokenKind.Colon));
-                                    }
-                                    else
-                                    {
-                                        return false;
-                                    }
-                                    
-                                    break;
-                                default:
-                                    declarations.Add(declaration);
-                                    break;
-                            }
-                        }
-                        else
-                        {
-                            return false;
-                        }
-
-                        break;
-                    default:
-                        // TODO: better error message
-                        _compiler.ReportError(next.Position, "Error");
+                    if (!TryParseDeclaration(out var declaration))
                         return false;
-                }
-            } while (running);
 
-            result = new Program(declarations);
+                    peek = PeekToken();
+                    switch (peek.Kind)
+                    {
+                        case TokenKind.Equal:
+                        case TokenKind.Colon:
+                            EatToken();
+                            if (!TryParseExpression(out var expression))
+                                return false;
+
+                            declarations.Add(
+                                new Variable(peek.Position, peek.Kind == TokenKind.Colon)
+                                {
+                                    Declaration = declaration,
+                                    Value = expression
+                                });
+
+                            break;
+                        default:
+                            declarations.Add(declaration);
+                            break;
+                    }
+                }
+                else
+                {
+                    // TODO: better error message
+                    _compiler.ReportError(peek.Position, "Error");
+                    return false;
+                }
+            }
+
+            result = new FileNode(start.Position) { Declarations = declarations };
             return true;
         }
 
-        /// <summary>
-        /// 
-        /// 
-        /// identifier : type? = something
-        /// identifier : type? : something
-        /// </summary>
-        /// <param name="result"></param>
-        /// <returns></returns>
         private bool TryParseDeclaration(out Declaration result)
         {
-            TypeNode declarationType;
-
             result = null;
-            
-            if (!TryEatToken(TokenKind.Identifier, out Token identifier))
+
+            if (!TryEatToken(TokenKind.Identifier, out var identifier))
             {
                 // TODO: better error message
                 _compiler.ReportError(identifier.Position, "Error");
                 return false;
             }
 
-            if (!TryEatToken(TokenKind.Colon, out Token colon))
+            if (!TryEatToken(TokenKind.Colon, out var colon))
             {
                 // TODO: better error message
                 _compiler.ReportError(colon.Position, "Error");
                 return false;
             }
 
+            Node type;
             var next = PeekToken();
-            if (next.Kind != TokenKind.Colon && next.Kind != TokenKind.Equal)
+            if (next.Kind == TokenKind.Colon || next.Kind == TokenKind.Equal)
             {
-                if (!TryParseType(out declarationType))
-                    return false;
+                type = new NeedsToBeInfered(next.Position);
             }
             else
             {
-                declarationType = new NeedsToBeInferedType(next.Position);
-            }
-            
-            result = new Declaration(identifier.Position, identifier.Value, declarationType);
-            return true;
-        }
-
-        private bool TryParseType(out TypeNode result)
-        {
-            result = null;
-
-            var startToken = EatToken();
-            switch (startToken.Kind)
-            {
-                case TokenKind.Identifier:
-                    result = new NamedType(startToken.Position, startToken.Value);
-                    break;
-
-                case TokenKind.At: {
-                        if (!TryParseType(out TypeNode poitingTo))
-                            return false;
-
-                        result = new PointerType(startToken.Position, poitingTo, PointerType.Kind.Normal);
-                        break;
-                    }
-
-                case TokenKind.UAt: {
-                        if (!TryParseType(out TypeNode poitingTo))
-                            return false;
-
-                        result = new PointerType(startToken.Position, poitingTo, PointerType.Kind.Unique);
-                        break;
-                    }
-
-                case TokenKind.SAt: {
-                        if (!TryParseType(out TypeNode poitingTo))
-                            return false;
-
-                        result = new PointerType(startToken.Position, poitingTo, PointerType.Kind.Shared);
-                        break;
-                    }
-
-                case TokenKind.SquareLeft:
-                    var dimensions = 1;
-                    while (TryEatToken(TokenKind.Comma, out Token comma))
-                        dimensions++;
-
-                    if (TryEatToken(TokenKind.SquareRight, out Token expectedSquareRight))
-                    {
-                        if (!TryParseType(out TypeNode arrayOf))
-                            return false;
-
-                        result = new ArrayType(startToken.Position, dimensions, arrayOf);
-                    }
-                    else
-                    {
-                        // TODO: better error message
-                        _compiler.ReportError(expectedSquareRight.Position, "Error");
-                        return false;
-                    }
-                    break;
-
-                case TokenKind.KeywordFunction:
-                case TokenKind.KeywordProcedure:
-                    var argumentTypes = new List<TypeNode>();
-
-                    if (!PeekIs(TokenKind.ParenthesesRight))
-                    {
-                        if (!TryParseType(out TypeNode argumentType))
-                            return false;
-
-                        argumentTypes.Add(argumentType);
-
-                        while (!PeekIs(TokenKind.ParenthesesRight))
-                        {
-                            if (TryEatToken(TokenKind.Comma, out Token expectedComman))
-                            {
-                                if (!TryParseType(out argumentType))
-                                    return false;
-                            }
-                            else
-                            {
-                                // TODO: better error message
-                                _compiler.ReportError(expectedComman.Position, "Error");
-                                return false;
-                            }
-                        }
-
-                    }
-
-                    if (TryEatToken(TokenKind.Arrow, out Token arrow))
-                    {
-                        if (!TryParseType(out TypeNode returnType))
-                            return false;
-
-                        result = new ProcedureType(startToken.Position, returnType, argumentTypes, startToken.Kind == TokenKind.KeywordFunction);
-                    }
-                    else
-                    {
-                        // TODO: better error message
-                        _compiler.ReportError(arrow.Position, "Error");
-                        return false;
-                    }
-                    break;
-
-                case TokenKind.ParenthesesLeft:
-                    var itemTypes = new List<TypeNode>();
-                    
-                    if (!PeekIs(TokenKind.ParenthesesRight))
-                    {
-                        if (!TryParseType(out TypeNode argumentType))
-                            return false;
-
-                        itemTypes.Add(argumentType);
-
-                        while (!PeekIs(TokenKind.ParenthesesRight))
-                        {
-                            if (TryEatToken(TokenKind.Comma, out Token expectedComman))
-                            {
-                                if (!TryParseType(out argumentType))
-                                    return false;
-                            }
-                            else
-                            {
-                                // TODO: better error message
-                                _compiler.ReportError(expectedComman.Position, "Error");
-                                return false;
-                            }
-                        }
-
-                    }
-
-                    result = new TupleType(startToken.Position, itemTypes);
-                    break;
-
-                default:
-                    // TODO: better error message
-                    _compiler.ReportError(startToken.Position, "Error");
+                if (!TryParseExpression(out type))
                     return false;
             }
 
+
+            result = new Declaration(identifier.Position)
+            {
+                DeclaredType = type,
+                Name = new Symbol(identifier.Position, identifier.Value)
+            };
             return true;
         }
-        
-        private bool TryParseExpression(out Expression result)
+
+        private bool TryParseExpression(out Node result)
         {
             result = null;
 
-            if (!TryParseTerm(out Expression top))
+            if (!TryParseUnary(out var top))
                 return false;
-            
-            for (;;)
-            {
-                BinaryOperator op;
-                var peek = PeekToken();
-                
-                // Check if next token is a binary operator
-                if (IsBinaryOperator(peek.Kind))
-                    op = new BinaryOperator(peek.Position, (BinaryOperatorKind)peek.Kind);
-                else
-                    break;
 
+            var peek = PeekToken();
+            while (IsBinaryOperator(peek.Kind))
+            {
+                var op = new BinaryOperator(peek.Position, (BinaryOperatorKind)peek.Kind);
                 EatToken();
 
-                if (!TryParseTerm(out Expression right))
+                if (!TryParseUnary(out var right))
                     return false;
-                
+
                 op.Left = top;
                 op.Right = right;
                 top = op;
@@ -357,104 +137,173 @@ namespace TheLang.Syntax
                     op.Left = b.Right;
                     b.Right = op;
                 }
+
+                peek = PeekToken();
             }
 
             result = top;
             return true;
         }
 
-        private bool TryParseTerm(out Expression result)
+        private bool TryParseUnary(out Node result)
         {
-            var peek = PeekToken();
+            #region Local Functions
+
+            bool TryParseUnaryOperatorOrArrayTypePrefix(out UnaryNode prefix)
+            {
+                var peekToken = PeekToken();
+
+                if (IsUnaryOperator(peekToken.Kind))
+                {
+                    EatToken();
+                    prefix = new UnaryOperator(peekToken.Position, (UnaryOperatorKind)peekToken.Kind);
+                    return true;
+                }
+
+                if (peekToken.Kind == TokenKind.SquareLeft)
+                {
+                    if (TryEatToken(TokenKind.SquareLeft, out var first))
+                    {
+                        // TODO: Error message
+                        prefix = null;
+                        _compiler.ReportError(first.Position, "");
+                        return false;
+                    }
+
+                    var dimensions = 1;
+                    while (TryEatToken(TokenKind.Comma))
+                        dimensions++;
+
+                    if (TryEatToken(TokenKind.SquareRight, out var last))
+                    {
+                        // TODO: Error message
+                        prefix = null;
+                        _compiler.ReportError(last.Position, "");
+                        return false;
+                    }
+
+                    prefix = new ArrayPostfix(first.Position, dimensions);
+                    return true;
+                }
+
+                prefix = null;
+                return true;
+            }
+
+            #endregion
+
+            #region Parsing unary prefixes
 
             result = null;
-            UnaryOperator unary = null;
-            if (IsUnaryOperator(peek.Kind))
+
+            if (!TryParseUnaryOperatorOrArrayTypePrefix(out var unary))
+                return false;
+
+            if (unary != null)
             {
-                unary = new UnaryOperator(peek.Position, (UnaryOperatorKind)peek.Kind);
                 result = unary;
 
-                while (IsUnaryOperator(peek.Kind))
+                for (;;)
                 {
-                    unary.Child = new UnaryOperator(peek.Position, (UnaryOperatorKind)peek.Kind);
-                    unary = (UnaryOperator)unary.Child;
+                    if (!TryParseUnaryOperatorOrArrayTypePrefix(out var child))
+                        return false;
+
+                    if (child != null)
+                    {
+                        unary.Child = child;
+                        unary = (UnaryNode)unary.Child;
+                    }
+                    else
+                    {
+                        break;
+                    }
                 }
             }
 
-            if (!TryParseLiteralOrSymbol(out Expression leaf))
+            #endregion
+
+            if (!TryParseTerm(out var leaf))
                 return false;
 
-            var parsingPostfix = true;
-            
-            do
+            #region Parsing unary postfixes
+
+            for (;;)
             {
-                switch (peek.Kind)
+                var peek = PeekToken();
+
+                if (peek.Kind == TokenKind.CurlyLeft)
                 {
-                    case TokenKind.CurlyLeft:
+                    #region Parsing indexing
+
+                    EatToken();
+                    var assignments = new List<BinaryOperator>();
+
+                    while (TryEatToken(TokenKind.Identifier, out var identifier))
                     {
-                        EatToken();
-                        var assignments = new List<Assignment>();
-                        var isLast = false;
+                        var left = new Symbol(identifier.Position, identifier.Value);
 
-                        while (!isLast && TryEatToken(TokenKind.Identifier, out peek))
-                        {
-                            var left = new Symbol(peek.Position, peek.Value);
-
-                            if (!TryEatToken(TokenKind.Equal, out peek))
-                            {
-                                // TODO: Error message
-                                _compiler.ReportError(peek.Position, "");
-                                return false;
-                            }
-
-                            if (!TryParseExpression(out Expression right))
-                                return false;
-
-                            assignments.Add(new Assignment(left.Position) { Left = left, Right = right });
-
-                            if (!TryEatToken(TokenKind.Comma, out peek))
-                                isLast = true;
-                        }
-
-                        if (!TryEatToken(TokenKind.CurlyRight, out peek))
+                        if (!TryEatToken(TokenKind.Equal, out var equal))
                         {
                             // TODO: Error message
-                            _compiler.ReportError(peek.Position, "");
+                            _compiler.ReportError(equal.Position, "");
                             return false;
                         }
 
-                        leaf = new CompositTypeLiteral(leaf.Position) { Type = leaf, Values = assignments };
-                        break;
-                    }
-                    case TokenKind.ParenthesesLeft:
-                    {
-                        EatToken();
-                        var arguments = new List<Expression>();
+                        if (!TryParseExpression(out var right))
+                            return false;
 
-                        if (TryEatToken(TokenKind.ParenthesesRight, out peek))
+                        assignments.Add(new BinaryOperator(left.Position, BinaryOperatorKind.Assign)
                         {
-                            leaf = new Call(leaf.Position) { Callee = leaf, Arguments = arguments };
+                            Left = left,
+                            Right = right
+                        });
+
+                        if (!TryEatToken(TokenKind.Comma))
                             break;
+                    }
+
+                    if (!TryEatToken(TokenKind.CurlyRight, out peek))
+                    {
+                        // TODO: Error message
+                        _compiler.ReportError(peek.Position, "");
+                        return false;
+                    }
+
+                    leaf = new CompositTypeLiteral(leaf.Position) { Child = leaf, Values = assignments };
+
+                    #endregion
+                }
+                else if (peek.Kind == TokenKind.ParenthesesLeft)
+                {
+                    #region Parsing call
+
+                    EatToken();
+                    var arguments = new List<Node>();
+
+                    while (!TryEatToken(TokenKind.ParenthesesRight))
+                    {
+                        if (arguments.Count != 0 && !TryEatToken(TokenKind.Comma, out var comma))
+                        {
+                            // TODO: Error message
+                            _compiler.ReportError(comma.Position, "");
+                            return false;
                         }
 
-                        peek = PeekToken();
+                        if (!TryParseExpression(out var argument))
+                            return false;
 
-                        // TODO: Parse arguments
-
-                        leaf = new Call(leaf.Position) { Callee = leaf, Arguments = arguments };
-                        break;
+                        arguments.Add(argument);
                     }
-                    case TokenKind.SquareLeft:
-                    {
 
-                        break;
-                    }
-                    default:
-                        parsingPostfix = false;
-                        break;
+                    leaf = new Call(leaf.Position) { Child = leaf, Arguments = arguments };
+
+                    #endregion
                 }
-            } while (parsingPostfix);
-
+                else
+                {
+                    break;
+                }
+            }
 
             if (unary != null)
                 unary.Child = leaf;
@@ -462,53 +311,168 @@ namespace TheLang.Syntax
                 result = leaf;
 
             return true;
+
+            #endregion
         }
 
-        private bool TryParseLiteralOrSymbol(out Expression result)
+        private bool TryParseTerm(out Node result)
         {
-            var token = EatToken();
+            result = null;
+            var start = EatToken();
 
-            switch (token.Kind)
+            if (start.Kind == TokenKind.Identifier)
             {
-                case TokenKind.Identifier:
-                    result = new Symbol(token.Position, token.Value);
-                    return true;
-                case TokenKind.FloatNumber:
-                    result = new FloatLiteral(token.Position, double.Parse(token.Value));
-                    return true;
-                case TokenKind.DecimalNumber:
-                    result = new IntegerLiteral(token.Position, int.Parse(token.Value));
-                    return true;
-                default:
-                    result = null;
-
-                    // TODO: Error message
-                    _compiler.ReportError(token.Position, "");
-                    return false;
+                result = new Symbol(start.Position, start.Value);
+                return true;
             }
+
+            if (start.Kind == TokenKind.FloatNumber)
+            {
+                result = new FloatLiteral(start.Position, double.Parse(start.Value));
+                return true;
+            }
+
+            if (start.Kind == TokenKind.DecimalNumber)
+            {
+                result = new IntegerLiteral(start.Position, int.Parse(start.Value));
+                return true;
+            }
+            
+            if (start.Kind == TokenKind.String)
+            {
+                result = new StringLiteral(start.Position, start.Value);
+                return true;
+            }
+
+            if (start.Kind == TokenKind.ParenthesesLeft)
+            {
+                // TODO: Parse par
+                _compiler.ReportError(start.Position, "");
+                return false;
+            }
+
+            if (start.Kind == TokenKind.KeywordFunction || start.Kind == TokenKind.KeywordProcedure)
+            {
+                if (!TryEatToken(TokenKind.ParenthesesLeft, out var parentheses))
+                {
+                    // TODO: better error message
+                    _compiler.ReportError(parentheses.Position, "Error");
+                    return false;
+                }
+                
+                var arguments = new List<Node>();
+
+                while (!TryEatToken(TokenKind.ParenthesesRight))
+                {
+                    if (arguments.Count != 0 && !TryEatToken(TokenKind.Comma, out var comma))
+                    {
+                        // TODO: Error message
+                        _compiler.ReportError(comma.Position, "");
+                        return false;
+                    }
+
+                    if (!TryParseExpression(out var argument))
+                        return false;
+
+                    arguments.Add(argument);
+                }
+
+                Node returnType;
+                if (TryEatToken(TokenKind.Arrow, out var arrow))
+                {
+                    if (!TryParseExpression(out returnType))
+                        return false;
+                }
+                else
+                {
+                    returnType = new NeedsToBeInfered(arrow.Position);
+                }
+
+                var peek = PeekToken();
+                switch (peek.Kind)
+                {
+                    case TokenKind.CurlyLeft:
+                        if (!TryParseCodeBlock(out var block))
+                            return false;
+
+                        result = new BlockBodyProcedure(start.Position, start.Kind == TokenKind.KeywordFunction)
+                        {
+                            Block = block,
+                            ReturnType = returnType,
+                            Arguments = arguments
+                        };
+                        return true;
+                }
+
+                result = new ProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
+                {
+                    Arguments = arguments,
+                    ReturnType = returnType
+                };
+                return true;
+            }
+
+            // TODO: Error message
+            _compiler.ReportError(start.Position, "");
+            return false;
         }
 
-        private void InitParser()
+        private bool TryParseCodeBlock(out CodeBlock result)
         {
-            _filesInProject = new HashSet<string>();
-            _filesToCompile = new Queue<string>();
+            result = null;
+
+            if (!TryEatToken(TokenKind.CurlyLeft, out var curlyLeft))
+            {
+                // TODO: Error message
+                _compiler.ReportError(curlyLeft.Position, "");
+                return false;
+            }
+
+            var statements = new List<Node>();
+
+            while (!TryEatToken(TokenKind.CurlyRight, out var peek))
+            {
+                if (PeekIs(TokenKind.Identifier) && PeekIs(TokenKind.Colon, 1))
+                {
+                    if (!TryParseDeclaration(out var declaration))
+                        return false;
+
+                    peek = PeekToken();
+                    switch (peek.Kind)
+                    {
+                        case TokenKind.Equal:
+                        case TokenKind.Colon:
+                            if (!TryParseExpression(out var expression))
+                                return false;
+
+                            statements.Add(
+                                new Variable(peek.Position, peek.Kind == TokenKind.Colon)
+                                {
+                                    Declaration = declaration,
+                                    Value = expression
+                                });
+
+                            break;
+                        default:
+                            statements.Add(declaration);
+                            break;
+                    }
+                }
+                else
+                {
+                    if (!TryParseExpression(out var expression))
+                        return false;
+
+                    statements.Add(expression);
+                }
+            }
+
+            result = new CodeBlock(curlyLeft.Position) { Statements = statements };
+            return true;
         }
 
-        private void InitParser(TextReader stream)
-        {
-            InitParser();
-            _currentScanner = new Scanner(stream);
-        }
-
-        private void InitParser(string fileName)
-        {
-            InitParser();
-            _currentScanner = new Scanner(fileName);
-            _filesInProject.Add(fileName);
-        }
-
-        private Token PeekToken(int offset = 0) => _currentScanner.Peek(offset);
-        private Token EatToken() => _currentScanner.Eat();
+        private Token PeekToken(int offset = 0) => _scanner.Peek(offset);
+        private Token EatToken() => _scanner.Eat();
         private bool PeekIs(TokenKind expectedKind, int offset = 0) => PeekToken(offset).Kind == expectedKind;
 
         /// <summary>
@@ -527,6 +491,13 @@ namespace TheLang.Syntax
             EatToken();
             return true;
         }
+
+        /// <summary>
+        /// Try to eat a token of a certain kind.
+        /// </summary>
+        /// <param name="expectedKind"></param>
+        /// <returns></returns>
+        private bool TryEatToken(TokenKind expectedKind) => TryEatToken(expectedKind, out var _);
 
         private bool IsBinaryOperator(TokenKind kind)
         {

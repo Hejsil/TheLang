@@ -4,14 +4,14 @@ using System.Text;
 using TheLang.AST.Bases;
 using TheLang.Syntax;
 
-namespace TheLang.AST.Expressions
+namespace TheLang.AST.Statments
 {
-    public class Call : UnaryNode
+    public class CodeBlock : Node
     {
-        public Call(Position position) 
+        public CodeBlock(Position position) 
             : base(position)
         { }
-        
-        public IEnumerable<Node> Arguments { get; set; }
+
+        public IEnumerable<Node> Statements { get; set; }
     }
 }

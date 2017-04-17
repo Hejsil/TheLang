@@ -1,6 +1,9 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.Serialization.Formatters;
 using System.Text;
 
 namespace TheLang.Syntax
@@ -16,7 +19,7 @@ namespace TheLang.Syntax
         private int _index = 0;
 
         private readonly string _fileName;
-        private int _line = 0;
+        private int _line = 1;
         private int _column = 0;
 
         private readonly Dictionary<string, TokenKind> _keywords = new Dictionary<string, TokenKind>()
@@ -61,197 +64,160 @@ namespace TheLang.Syntax
             SkipWhiteSpaceAndComments();
 
             var position = new Position(_fileName, _line, _column);
-            var current = EatChar();
-            var result = new StringBuilder(current);
-            var peek = PeekChar();
+            var startIndex = _index;
 
-            if (current == 'u' && peek == '@')
+            if (PeekIs('@', 1))
             {
-                result.Append(EatChar());
-                return new Token(TokenKind.UAt, result.ToString(), position);
-            }
-
-            if (current == 's' && peek == '@')
-            {
-                result.Append(EatChar());
-                return new Token(TokenKind.SAt, result.ToString(), position);
-            }
-
-            if (char.IsLetter(current) || current == '_')
-            {
-                while (char.IsLetterOrDigit(peek) || peek == '_')
+                if (EatChar('u'))
                 {
-                    result.Append(EatChar());
-                    peek = PeekChar();
+                    EatChar();
+                    return new Token(TokenKind.UAt, GetValue(startIndex), position);
                 }
+                if (EatChar('s'))
+                {
+                    EatChar();
+                    return new Token(TokenKind.SAt, GetValue(startIndex), position);
+                }
+            }
 
-                var resultStr = result.ToString();
+            if (EatChar(c => char.IsLetter(c) || c == '_') )
+            {
+                while (EatChar(c => char.IsLetterOrDigit(c) || c == '_')) { }
 
+                var resultStr = GetValue(startIndex);
                 if (_keywords.TryGetValue(resultStr, out TokenKind kind))
                     return new Token(kind, resultStr, position);
 
                 return new Token(TokenKind.Identifier, resultStr, position);
             }
 
-            if (char.IsDigit(current))
+            if (EatChar(char.IsDigit))
             {
-                while (char.IsDigit(peek) || peek == '_')
-                {
-                    result.Append(EatChar());
-                    peek = PeekChar();
-                }
+                while (EatChar(c => char.IsDigit(c) || c == '_')) { }
 
-                if (peek == '.')
-                {
-                    result.Append(EatChar());
-                    while (char.IsDigit(peek) || peek == '_')
-                    {
-                        result.Append(EatChar());
-                        peek = PeekChar();
-                    }
+                if (!EatChar('.'))
+                    return new Token(TokenKind.DecimalNumber, GetValue(startIndex), position);
 
-                    return new Token(TokenKind.FloatNumber, result.ToString(), position);
-                }
+                while (EatChar(c => char.IsDigit(c) || c == '_')) { }
 
-                return new Token(TokenKind.DecimalNumber, result.ToString(), position);
+                return new Token(TokenKind.FloatNumber, GetValue(startIndex), position);
             }
-            
-            switch (current)
+
+            var eaten = PeekChar();
+            EatChar();
+            switch (eaten)
             {
                 case '+':
-                    return ScanSingleOrDoubleToken('=', TokenKind.PlusEqual, TokenKind.Plus, result, position);
+                    return new Token(EatChar('=') ? TokenKind.PlusEqual : TokenKind.Plus, GetValue(startIndex), position);
                 case '-':
-                    if (peek == '>')
-                    {
-                        result.Append(EatChar());
-                        return new Token(TokenKind.Arrow, result.ToString(), position);
-                    }
-
-                    return ScanSingleOrDoubleToken('=', TokenKind.MinusEqual, TokenKind.Minus, result, position);
+                    if (!EatChar('>'))
+                        return new Token(EatChar('=') ? TokenKind.MinusEqual : TokenKind.Minus, GetValue(startIndex), position);
+                    
+                    return new Token(TokenKind.Arrow, GetValue(startIndex), position);
                 case '*':
-                    return ScanSingleOrDoubleToken('=', TokenKind.TimesEqual, TokenKind.Times, result, position);
+                    return new Token(EatChar('=') ? TokenKind.TimesEqual : TokenKind.Times, GetValue(startIndex), position);
                 case '/':
-                    return ScanSingleOrDoubleToken('=', TokenKind.DivideEqual, TokenKind.Divide, result, position);
+                    return new Token(EatChar('=') ? TokenKind.DivideEqual : TokenKind.Divide, GetValue(startIndex), position);
                 case '%':
-                    return ScanSingleOrDoubleToken('=', TokenKind.ModulusEqual, TokenKind.Modulo, result, position);
+                    return new Token(EatChar('=') ? TokenKind.ModulusEqual : TokenKind.Modulo, GetValue(startIndex), position);
                 case '^':
-                    return ScanSingleOrDoubleToken('=', TokenKind.ExponentEqual, TokenKind.Exponent, result, position);
+                    return new Token(EatChar('=') ? TokenKind.ExponentEqual : TokenKind.Exponent, GetValue(startIndex), position);
                 case '=':
-                    return ScanSingleOrDoubleToken('=', TokenKind.EqualEqual, TokenKind.Equal, result, position);
+                    return new Token(EatChar('=') ? TokenKind.EqualEqual : TokenKind.Equal, GetValue(startIndex), position);
                 case '<':
-                    return ScanSingleOrDoubleToken('=', TokenKind.LessThanEqual, TokenKind.LessThan, result, position);
+                    return new Token(EatChar('=') ? TokenKind.LessThanEqual : TokenKind.LessThan, GetValue(startIndex), position);
                 case '>':
-                    return ScanSingleOrDoubleToken('=', TokenKind.GreaterThanEqual, TokenKind.GreaterThan, result, position);
-                case '@':
-                    return new Token(TokenKind.At, result.ToString(), position);
-                case '~':
-                    return new Token(TokenKind.Tilde, result.ToString(), position);
-                case '[':
-                    return new Token(TokenKind.SquareLeft, result.ToString(), position);
-                case ']':
-                    return new Token(TokenKind.SquareRight, result.ToString(), position);
-                case '(':
-                    return new Token(TokenKind.ParenthesesLeft, result.ToString(), position);
-                case ')':
-                    return new Token(TokenKind.ParenthesesRight, result.ToString(), position);
-                case '{':
-                    return new Token(TokenKind.CurlyLeft, result.ToString(), position);
-                case '}':
-                    return new Token(TokenKind.CurlyRight, result.ToString(), position);
-                case ':':
-                    return new Token(TokenKind.Colon, result.ToString(), position);
-                case ';':
-                    return new Token(TokenKind.SemiColon, result.ToString(), position);
-                case ',':
-                    return new Token(TokenKind.Comma, result.ToString(), position);
-                case '.':
-                    if (char.IsDigit(peek))
-                    {
-                        result.Insert(0, '0');
-                        result.Append(EatChar());
-                        peek = PeekChar();
-
-                        while (true)
-                        {
-                            if (char.IsDigit(peek))
-                                result.Append(EatChar());
-                            else if (peek == '_')
-                                EatChar();
-                            else
-                                break;
-
-                            peek = PeekChar();
-                        }
-
-                        return new Token(TokenKind.FloatNumber, result.ToString(), position);
-                    }
-
-                    return new Token(TokenKind.Dot, result.ToString(), position);
+                    return new Token(EatChar('=') ? TokenKind.GreaterThanEqual : TokenKind.GreaterThan, GetValue(startIndex), position);
                 case '!':
-                    switch (peek)
-                    {
-                        case '=':
-                            result.Append(EatChar());
-                            return new Token(TokenKind.ExclamationMarkEqual, result.ToString(), position);
-                        default:
-                            return new Token(TokenKind.ExclamationMark, result.ToString(), position);
-                    }
+                    return new Token(EatChar('=') ? TokenKind.ExclamationMarkEqual : TokenKind.ExclamationMark, GetValue(startIndex), position);
+                case '@':
+                    return new Token(TokenKind.At, GetValue(startIndex), position);
+                case '~':
+                    return new Token(TokenKind.Tilde, GetValue(startIndex), position);
+                case '[':
+                    return new Token(TokenKind.SquareLeft, GetValue(startIndex), position);
+                case ']':
+                    return new Token(TokenKind.SquareRight, GetValue(startIndex), position);
+                case '(':
+                    return new Token(TokenKind.ParenthesesLeft, GetValue(startIndex), position);
+                case ')':
+                    return new Token(TokenKind.ParenthesesRight, GetValue(startIndex), position);
+                case '{':
+                    return new Token(TokenKind.CurlyLeft, GetValue(startIndex), position);
+                case '}':
+                    return new Token(TokenKind.CurlyRight, GetValue(startIndex), position);
+                case ':':
+                    return new Token(TokenKind.Colon, GetValue(startIndex), position);
+                case ';':
+                    return new Token(TokenKind.SemiColon, GetValue(startIndex), position);
+                case ',':
+                    return new Token(TokenKind.Comma, GetValue(startIndex), position);
+                case '.':
+                    if (!EatChar(char.IsDigit))
+                        return new Token(TokenKind.Dot, GetValue(startIndex), position);
+
+                    while (EatChar(c => char.IsDigit(c) || c == '_')) { }
+
+                    return new Token(TokenKind.FloatNumber, $"0{GetValue(startIndex).Replace("_", "")}", position);
+
                 case EndOfFile:
-                    return new Token(TokenKind.EndOfFile, result.ToString(), position);
+                    return new Token(TokenKind.EndOfFile, GetValue(startIndex), position);
+                case '"':
+                    while (!EatChar('"'))
+                    {
+                        if (PeekIs(EndOfFile))
+                            return new Token(TokenKind.Unknown, GetValue(startIndex), position);
+
+                        EatChar('\\');
+                        EatChar();
+                    }
+
+                    return new Token(TokenKind.String, GetValue(startIndex + 1, -1), position);
                 default:
-                    return new Token(TokenKind.Unknown, result.ToString(), position);
+                    return new Token(TokenKind.Unknown, GetValue(startIndex), position);
             }
-        }
-
-        private Token ScanSingleOrDoubleToken(char followChar, TokenKind match, TokenKind notMatch, StringBuilder result, Position position)
-        {
-            var peek = PeekChar();
-            if (peek == followChar)
-            {
-                result.Append(EatChar());
-                return new Token(match, result.ToString(), position);
-            }
-
-            return new Token(notMatch, result.ToString(), position);
         }
 
         private void SkipWhiteSpaceAndComments()
         {
-            while (true)
+            for (;;)
             {
-                var peek = PeekChar();
+                if (EatChar(char.IsWhiteSpace))
+                    continue;
 
-                if (char.IsWhiteSpace(peek))
+                if (PeekIs('/'))
                 {
-                    EatChar();
-                }
-                else if (peek == '/')
-                {
-                    peek = PeekChar();
-
-                    switch (peek)
+                    if (PeekIs('/', 1))
                     {
-                        case '/':
-                            while (EatChar() != NewLine) { }
-                            break;
-                        case '*':
+                        Debug.Assert(EatChar('/'));
+                        Debug.Assert(EatChar('/'));
+                        while (EatChar(c => c != NewLine)) { }
+                        continue;
+                    }
+
+                    if (PeekIs('*', 1))
+                    {
+                        Debug.Assert(EatChar('/'));
+                        Debug.Assert(EatChar('*'));
+
+                        while (!(PeekIs('*') && PeekIs('/')))
                             EatChar();
-                            var prev = EatChar();
-                            var current = EatChar();
 
-                            while (!(prev == '*' && current == '/'))
-                            {
-                                prev = current;
-                                current = EatChar();
-                            }
-
-                            break;
-                        default:
-                            break;
+                        Debug.Assert(EatChar('*'));
+                        Debug.Assert(EatChar('/'));
+                        continue;
                     }
                 }
+
+                break;
             }
         }
+
+        private bool EatChar(Predicate<char> predicate) => EatChar(PeekIs(predicate));
+        private bool EatChar(char chr) => EatChar(PeekIs(chr));
+
+        private bool PeekIs(Predicate<char> predicate, int offset = 0) => predicate(PeekChar(offset));
+        private bool PeekIs(char predicate, int offset = 0) => predicate == PeekChar(offset);
 
         private char PeekChar(int offset = 0)
         {
@@ -261,10 +227,10 @@ namespace TheLang.Syntax
             return _program[_index + offset];
         }
 
-        private char EatChar()
+        private bool EatChar(bool eat = true)
         {
-            if (_program.Length <= _index)
-                return EndOfFile;
+            if (!eat || _program.Length <= _index)
+                return false;
 
             var res = _program[_index];
             _index++;
@@ -272,14 +238,16 @@ namespace TheLang.Syntax
             if (res == NewLine)
             {
                 _line++;
-                _column = 1;
+                _column = 0;
             }
             else
             {
                 _column++;
             }
-
-            return res;
+            
+            return true;
         }
+
+        private string GetValue(int startIndex, int indexOffset = 0) => _program.Substring(startIndex, (_index + indexOffset) - startIndex);
     }
 }

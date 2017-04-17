@@ -24,6 +24,13 @@
         NotEqual = 0x51,
 
         And = 0x60,
-        Or = 0x61
+        Or = 0x61,
+
+        Assign = 0x70,
+        PlusAssign = 0x71,
+        MinusAssign = 0x72,
+        TimesAssign = 0x73,
+        DivideAssign = 0x74,
+        ModulusAssign = 0x75
     }
 }

@@ -4,13 +4,12 @@ namespace TheLang.Syntax
 {
     public enum TokenKind
     {
-        Identifier,
-        FloatNumber,
-        DecimalNumber,
-
-        KeywordStruct,
-        KeywordProcedure,
-        KeywordFunction,
+        // Unary operators
+        ExclamationMark = UnaryOperatorKind.Not,
+        At = UnaryOperatorKind.Reference,
+        SAt = UnaryOperatorKind.SharedReference,
+        UAt = UnaryOperatorKind.UniqueReference,
+        Tilde = UnaryOperatorKind.Dereference,
 
         // Binary operators
         Plus = BinaryOperatorKind.Plus,
@@ -28,22 +27,22 @@ namespace TheLang.Syntax
         KeywordOr = BinaryOperatorKind.Or,
         KeywordAs = BinaryOperatorKind.As,
         Dot = BinaryOperatorKind.Dot,
+        Equal = BinaryOperatorKind.Assign,
+        PlusEqual = BinaryOperatorKind.PlusAssign,
+        MinusEqual = BinaryOperatorKind.MinusAssign,
+        TimesEqual = BinaryOperatorKind.TimesAssign,
+        DivideEqual = BinaryOperatorKind.DivideAssign,
+        ModulusEqual = BinaryOperatorKind.ModulusAssign,
 
-        // Unary operators
-        ExclamationMark = UnaryOperatorKind.Not,
-        At = UnaryOperatorKind.Reference,
-        SAt = UnaryOperatorKind.SharedReference,
-        UAt = UnaryOperatorKind.UniqueReference,
-        Tilde = UnaryOperatorKind.Dereference,
+        Identifier,
+        FloatNumber,
+        DecimalNumber,
+        String,
 
-        // Assignements
-        PlusEqual,
-        MinusEqual,
-        TimesEqual,
-        DivideEqual,
-        ModulusEqual,
-        Equal,
-        
+        KeywordStruct,
+        KeywordProcedure,
+        KeywordFunction,
+
         Exponent,
         ExponentEqual,
 
