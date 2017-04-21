@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using TheLang.AST;
 using TheLang.AST.Bases;
@@ -10,18 +11,23 @@ using TheLang.AST.Statments;
 
 namespace TheLang.Syntax
 {
-    public class Parser
+    public class Parser : Scanner
     {
         private readonly Compiler _compiler;
-        private readonly Scanner _scanner;
 
-        public Parser(Scanner scanner, Compiler compiler)
+        public Parser(string fileName, Compiler compiler)
+            : base(fileName)
         {
             _compiler = compiler;
-            _scanner = scanner;
         }
 
-        public bool TryParseProgram(out FileNode result)
+        public Parser(TextReader reader, Compiler compiler)
+            : base(reader)
+        {
+            _compiler = compiler;
+        }
+
+        public bool TryParseFile(out FileNode result)
         {
             result = null;
 
@@ -47,7 +53,8 @@ namespace TheLang.Syntax
                             declarations.Add(
                                 new Variable(peek.Position, peek.Kind == TokenKind.Colon)
                                 {
-                                    Declaration = declaration,
+                                    DeclaredType = declaration.DeclaredType,
+                                    Name = declaration.Name,
                                     Value = expression
                                 });
 
@@ -59,8 +66,9 @@ namespace TheLang.Syntax
                 }
                 else
                 {
-                    // TODO: better error message
-                    _compiler.ReportError(peek.Position, "Error");
+                    _compiler.ReportError(peek.Position, 
+                        $"Expected {TokenKind.Identifier}, but got {peek.Kind}.", 
+                        "Only declarations can exist in the global scope of a program.");
                     return false;
                 }
             }
@@ -75,15 +83,15 @@ namespace TheLang.Syntax
 
             if (!TryEatToken(TokenKind.Identifier, out var identifier))
             {
-                // TODO: better error message
-                _compiler.ReportError(identifier.Position, "Error");
+                _compiler.ReportError(identifier.Position,
+                    $"Was trying to parse a Declaration and expected an {TokenKind.Identifier}, but got {identifier.Kind}.");
                 return false;
             }
 
             if (!TryEatToken(TokenKind.Colon, out var colon))
             {
-                // TODO: better error message
-                _compiler.ReportError(colon.Position, "Error");
+                _compiler.ReportError(colon.Position,
+                    $"Was trying to parse a Declaration and expected an {TokenKind.Colon}, but got {colon.Kind}.");
                 return false;
             }
 
@@ -103,7 +111,7 @@ namespace TheLang.Syntax
             result = new Declaration(identifier.Position)
             {
                 DeclaredType = type,
-                Name = new Symbol(identifier.Position, identifier.Value)
+                Name = identifier.Value
             };
             return true;
         }
@@ -131,11 +139,20 @@ namespace TheLang.Syntax
                 // The loop that ensures that the operators upholds their priority.
                 while (op.Left is BinaryOperator b)
                 {
-                    if (b.Priority <= op.Priority)
+                    if (b.Priority < op.Priority)
+                        break;
+                    if (b.Priority == op.Priority && op.Associativity != AssociativityKind.RightToLeft)
                         break;
 
                     op.Left = b.Right;
                     b.Right = op;
+                }
+
+                if (op.Kind == BinaryOperatorKind.Dot && !(op.Right is Symbol))
+                {
+                    _compiler.ReportError(op.Right.Position, 
+                        "Only an identifier is allowed on the right side of the dot operator.");
+                    return false;
                 }
 
                 peek = PeekToken();
@@ -160,25 +177,18 @@ namespace TheLang.Syntax
                     return true;
                 }
 
-                if (peekToken.Kind == TokenKind.SquareLeft)
+                if (TryEatToken(TokenKind.SquareLeft, out var first))
                 {
-                    if (TryEatToken(TokenKind.SquareLeft, out var first))
-                    {
-                        // TODO: Error message
-                        prefix = null;
-                        _compiler.ReportError(first.Position, "");
-                        return false;
-                    }
-
                     var dimensions = 1;
                     while (TryEatToken(TokenKind.Comma))
                         dimensions++;
 
                     if (TryEatToken(TokenKind.SquareRight, out var last))
                     {
-                        // TODO: Error message
                         prefix = null;
-                        _compiler.ReportError(last.Position, "");
+
+                        _compiler.ReportError(last.Position, 
+                            $"Could not find the end of the array prefix. Expected {TokenKind.SquareRight}, but got {last.Kind}.");
                         return false;
                     }
 
@@ -244,8 +254,8 @@ namespace TheLang.Syntax
 
                         if (!TryEatToken(TokenKind.Equal, out var equal))
                         {
-                            // TODO: Error message
-                            _compiler.ReportError(equal.Position, "");
+                            _compiler.ReportError(equal.Position,
+                                $"Can only assign in the curly brackets of an composit type literal. Expected {TokenKind.Equal}, but got {equal.Kind}.");
                             return false;
                         }
 
@@ -264,8 +274,8 @@ namespace TheLang.Syntax
 
                     if (!TryEatToken(TokenKind.CurlyRight, out peek))
                     {
-                        // TODO: Error message
-                        _compiler.ReportError(peek.Position, "");
+                        _compiler.ReportError(peek.Position,
+                            $"Did not find the end of the composit type literal. Expected {TokenKind.CurlyRight}, but got {peek.Kind}.");
                         return false;
                     }
 
@@ -284,8 +294,8 @@ namespace TheLang.Syntax
                     {
                         if (arguments.Count != 0 && !TryEatToken(TokenKind.Comma, out var comma))
                         {
-                            // TODO: Error message
-                            _compiler.ReportError(comma.Position, "");
+                            _compiler.ReportError(comma.Position,
+                                $"Found an unexpected token when parsing a procedure call's arguments. Expected {TokenKind.Comma}, but got {comma.Kind}.");
                             return false;
                         }
 
@@ -346,17 +356,23 @@ namespace TheLang.Syntax
 
             if (start.Kind == TokenKind.ParenthesesLeft)
             {
-                // TODO: Parse par
-                _compiler.ReportError(start.Position, "");
+                if (!TryParseExpression(out result))
+                    return false;
+
+                if (TryEatToken(TokenKind.ParenthesesRight, out var parRight))
+                    return true;
+
+                _compiler.ReportError(parRight.Position,
+                    $"Could not find a pair for the left parentheses at {start.Position.Line}:{start.Position.Column}. Expected {TokenKind.ParenthesesRight}, but got {parRight.Kind}.");
                 return false;
             }
 
             if (start.Kind == TokenKind.KeywordFunction || start.Kind == TokenKind.KeywordProcedure)
             {
-                if (!TryEatToken(TokenKind.ParenthesesLeft, out var parentheses))
+                if (!TryEatToken(TokenKind.ParenthesesLeft, out var parLeft))
                 {
-                    // TODO: better error message
-                    _compiler.ReportError(parentheses.Position, "Error");
+                    _compiler.ReportError(parLeft.Position,
+                        $"Could not find the start parentheses at the start of a procedure's argument. Expected {TokenKind.ParenthesesLeft}, but got {parLeft.Kind}.");
                     return false;
                 }
                 
@@ -366,8 +382,8 @@ namespace TheLang.Syntax
                 {
                     if (arguments.Count != 0 && !TryEatToken(TokenKind.Comma, out var comma))
                     {
-                        // TODO: Error message
-                        _compiler.ReportError(comma.Position, "");
+                        _compiler.ReportError(comma.Position,
+                            $"Found an unexpected token when parsing a procedure's arguments. Expected {TokenKind.Comma}, but got {comma.Kind}.");
                         return false;
                     }
 
@@ -411,9 +427,9 @@ namespace TheLang.Syntax
                 };
                 return true;
             }
-
-            // TODO: Error message
-            _compiler.ReportError(start.Position, "");
+            
+            _compiler.ReportError(start.Position, 
+                $"While parsing a term, the parser found an unexpected token: {start.Kind}");
             return false;
         }
 
@@ -423,8 +439,8 @@ namespace TheLang.Syntax
 
             if (!TryEatToken(TokenKind.CurlyLeft, out var curlyLeft))
             {
-                // TODO: Error message
-                _compiler.ReportError(curlyLeft.Position, "");
+                _compiler.ReportError(curlyLeft.Position,
+                    $"Did not find the start of a code block. Expected {TokenKind.CurlyLeft}, but got {curlyLeft.Kind}");
                 return false;
             }
 
@@ -448,7 +464,8 @@ namespace TheLang.Syntax
                             statements.Add(
                                 new Variable(peek.Position, peek.Kind == TokenKind.Colon)
                                 {
-                                    Declaration = declaration,
+                                    DeclaredType = declaration.DeclaredType,
+                                    Name = declaration.Name,
                                     Value = expression
                                 });
 
@@ -470,9 +487,7 @@ namespace TheLang.Syntax
             result = new CodeBlock(curlyLeft.Position) { Statements = statements };
             return true;
         }
-
-        private Token PeekToken(int offset = 0) => _scanner.Peek(offset);
-        private Token EatToken() => _scanner.Eat();
+        
         private bool PeekIs(TokenKind expectedKind, int offset = 0) => PeekToken(offset).Kind == expectedKind;
 
         /// <summary>

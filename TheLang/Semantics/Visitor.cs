@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using TheLang.AST;
 using TheLang.AST.Bases;
@@ -39,9 +40,9 @@ namespace TheLang.Semantics
                     return Visit(n);
                 case CodeBlock n:
                     return Visit(n);
-                case Declaration n:
-                    return Visit(n);
                 case Variable n:
+                    return Visit(n);
+                case Declaration n:
                     return Visit(n);
                 case ArrayPostfix n:
                     return Visit(n);
@@ -58,23 +59,36 @@ namespace TheLang.Semantics
             throw new ArgumentException("The argument was of a type not supported by this visitor", nameof(node));
         }
 
-        public abstract bool Visit(StringLiteral node);
-        public abstract bool Visit(Variable node);
-        public abstract bool Visit(NeedsToBeInfered node);
-        public abstract bool Visit(IntegerLiteral node);
-        public abstract bool Visit(FloatLiteral node);
-        public abstract bool Visit(ArrayPostfix node);
-        public abstract bool Visit(TupleLiteral node);
-        public abstract bool Visit(Declaration node);
-        public abstract bool Visit(BinaryOperator node);
-        public abstract bool Visit(UnaryOperator node);
-        public abstract bool Visit(Symbol node);
-        public abstract bool Visit(CompositTypeLiteral node);
-        public abstract bool Visit(Call node);
-        public abstract bool Visit(ProcedureLiteral node);
+        protected abstract bool Visit(StringLiteral node);
+        protected abstract bool Visit(Variable node);
+        protected abstract bool Visit(NeedsToBeInfered node);
+        protected abstract bool Visit(IntegerLiteral node);
+        protected abstract bool Visit(FloatLiteral node);
+        protected abstract bool Visit(ArrayPostfix node);
+        protected abstract bool Visit(TupleLiteral node);
+        protected abstract bool Visit(Declaration node);
+        protected abstract bool Visit(BinaryOperator node);
+        protected abstract bool Visit(UnaryOperator node);
+        protected abstract bool Visit(Symbol node);
+        protected abstract bool Visit(CompositTypeLiteral node);
+        protected abstract bool Visit(Call node);
+        protected abstract bool Visit(ProcedureLiteral node);
 
-        public virtual bool Visit(ProgramNode node) => node.Files.All(Visit);
-        public virtual bool Visit(FileNode node) => node.Declarations.All(Visit);
-        public virtual bool Visit(CodeBlock node) => node.Statements.All(Visit);
+        protected virtual bool Visit(ProgramNode node) => VisitCollection(node.Files);
+        protected virtual bool Visit(FileNode node) => VisitCollection(node.Declarations);
+        protected virtual bool Visit(CodeBlock node) => VisitCollection(node.Statements);
+
+        protected bool VisitCollection<T>(IEnumerable<T> nodes) where T : Node
+        {
+            var hasFailed = false;
+
+            foreach (var node in nodes)
+            {
+                if (!Visit(node))
+                    hasFailed = true;
+            }
+
+            return hasFailed;
+        }
     }
 }

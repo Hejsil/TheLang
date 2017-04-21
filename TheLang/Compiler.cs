@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using TheLang.AST;
 using TheLang.AST.Bases;
 using TheLang.Semantics.TypeChecking.Types;
 using TheLang.Syntax;
@@ -9,11 +10,55 @@ namespace TheLang
 {
     public class Compiler
     {
+        public ProgramNode Tree { get; set; }
+
         private readonly HashSet<string> _filesInProject = new HashSet<string>();
         private readonly Queue<string> _filesToCompile = new Queue<string>();
 
-        private Compiler()
-        { }
+        public bool ParseProgram(TextReader reader)
+        {
+            var files = new List<FileNode>();
+            var parser = new Parser(reader, this);
+
+            if (!parser.TryParseFile(out var fileNode))
+                return false;
+
+            files.Add(fileNode);
+
+            ParserLoop(files);
+
+            Tree = new ProgramNode { Files = files };
+
+            return true;
+        }
+
+        public bool ParseProgram()
+        {
+            var files = new List<FileNode>();
+
+            if (!ParserLoop(files))
+                return false;
+
+            Tree = new ProgramNode { Files = files };
+
+            return true;
+        }
+
+        private bool ParserLoop(ICollection<FileNode> result)
+        {
+            while (_filesInProject.Count != 0)
+            {
+                var parser = new Parser(_filesToCompile.Dequeue(), this);
+
+                if (!parser.TryParseFile(out var fileNode))
+                    return false;
+
+                result.Add(fileNode);
+            }
+
+            return true;
+        }
+
 
         public void AddFileToProject(string fileName)
         {
@@ -21,25 +66,17 @@ namespace TheLang
                 _filesToCompile.Enqueue(fileName);
         }
 
-
-        private bool Compile()
+        public void ReportError(Position position, string message, string hint)
         {
-
-
-            return true;
-        }
-
-        public static bool Compile(string fileName)
-        {
-            var compiler = new Compiler();
-
-            compiler.AddFileToProject(fileName);
-            return compiler.Compile();
+            Console.Error.WriteLine(
+                $"Error at {position.FileName}:{position.Line}:{position.Column}: {message}\n" +
+                $"\tHint: {hint}");
         }
 
         public void ReportError(Position position, string message)
         {
-            Console.Error.WriteLine($"Error at {position.FileName}:{position.Line}:{position.Column}: {message}");
+            Console.Error.WriteLine(
+                $"Error at {position.FileName}:{position.Line}:{position.Column}: {message}");
         }
     }
 }

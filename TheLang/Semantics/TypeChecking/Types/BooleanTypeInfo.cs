@@ -6,17 +6,12 @@ using System.Threading.Tasks;
 
 namespace TheLang.Semantics.TypeChecking.Types
 {
-    public class BooleanType : TypeInfo
+    public class BooleanTypeInfo : TypeInfo
     {
-        public BooleanType(int size) 
+        public BooleanTypeInfo(int size) 
             : base(size)
-        {
-        }
+        { }
 
-        public override bool Equals(object obj) => 
-            obj is BooleanType b && 
-            Size == b.Size;
-        
         public override string ToString() => $"Bool{Size}";
     }
 }

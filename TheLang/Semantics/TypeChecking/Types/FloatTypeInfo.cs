@@ -6,17 +6,12 @@ using System.Threading.Tasks;
 
 namespace TheLang.Semantics.TypeChecking.Types
 {
-    public class FloatType : TypeInfo
+    public class FloatTypeInfo : TypeInfo
     {
-        public FloatType(int size) 
+        public FloatTypeInfo(int size) 
             : base(size)
-        {
-        }
+        { }
 
-        public override bool Equals(object obj) => 
-            obj is FloatType f && 
-            Size == f.Size;
-        
         public override string ToString() => $"Float{Size}";
     }
 }

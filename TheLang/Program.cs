@@ -9,11 +9,6 @@ namespace TheLang
     {
         public static void Main()
         {
-            var type = typeof(Compiler);
-
-            new Compiler().Compile("Examples\\HelloWorld.tl");
-            new Compiler().Compile("Examples\\VariablesAndConstants.tl");
-
             Console.ReadKey();
         }
     }

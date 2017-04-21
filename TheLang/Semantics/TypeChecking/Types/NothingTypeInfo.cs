@@ -6,16 +6,12 @@ using System.Threading.Tasks;
 
 namespace TheLang.Semantics.TypeChecking.Types
 {
-    public class Nothing : TypeInfo
+    public class NothingTypeInfo : TypeInfo
     {
-
-        public Nothing() 
+        public NothingTypeInfo() 
             : base(0)
-        {
-        }
+        { }
 
-
-        public override bool Equals(object obj) => obj is Nothing;
         public override string ToString() => "Nothing";
     }
 }

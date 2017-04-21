@@ -10,7 +10,7 @@ namespace TheLang.AST.Statments
             : base(position)
         { }
 
-        public Symbol Name { get; set; }
+        public string Name { get; set; }
         public Node DeclaredType { get; set; }
     }
 }

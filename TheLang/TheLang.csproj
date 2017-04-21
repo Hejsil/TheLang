@@ -42,6 +42,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include=".OBeautifulCode.Recipes\OBeautifulCode.Math\HashCodeHelper.cs" />
     <Compile Include="AST\Bases\BinaryNode.cs" />
     <Compile Include="AST\Expressions\Call.cs" />
     <Compile Include="AST\Expressions\Literals\BlockBodyProcedure.cs" />
@@ -52,6 +53,7 @@
     <Compile Include="AST\Expressions\Literals\ProcedureLiteral.cs" />
     <Compile Include="AST\Expressions\Literals\StringLiteral.cs" />
     <Compile Include="AST\Expressions\Literals\TupleLiteral.cs" />
+    <Compile Include="AST\Expressions\Operators\AssociativityKind.cs" />
     <Compile Include="AST\Expressions\Operators\BinaryOperator.cs" />
     <Compile Include="AST\Expressions\Operators\BinaryOperatorKind.cs" />
     <Compile Include="AST\Expressions\Operators\UnaryOperator.cs" />
@@ -59,17 +61,20 @@
     <Compile Include="AST\Expressions\Symbol.cs" />
     <Compile Include="AST\FileNode.cs" />
     <Compile Include="Semantics\TypeChecking\TypeChecker.cs" />
-    <Compile Include="Semantics\TypeChecking\Types\ArrayType.cs" />
-    <Compile Include="Semantics\TypeChecking\Types\BooleanType.cs" />
-    <Compile Include="Semantics\TypeChecking\Types\CompositType.cs" />
-    <Compile Include="Semantics\TypeChecking\Types\FloatType.cs" />
-    <Compile Include="Semantics\TypeChecking\Types\IntegerType.cs" />
-    <Compile Include="Semantics\TypeChecking\Types\PointerType.cs" />
-    <Compile Include="Semantics\TypeChecking\Types\ProcedureType.cs" />
-    <Compile Include="Semantics\TypeChecking\Types\TupleType.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\ConstantTypeInfo.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\PointerKind.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\StringTypeInfo.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\ArrayTypeInfo.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\BooleanTypeInfo.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\CompositTypeInfo.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\FloatTypeInfo.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\IntegerTypeInfo.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\PointerTypeInfo.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\ProcedureTypeInfo.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\TupleTypeInfo.cs" />
     <Compile Include="Semantics\TypeChecking\Types\TypeInfo.cs" />
-    <Compile Include="Semantics\TypeChecking\Types\Nothing.cs" />
-    <Compile Include="Semantics\TypeChecking\Types\TypeType.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\NothingTypeInfo.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\TypeTypeInfo.cs" />
     <Compile Include="Semantics\Visitor.cs" />
     <Compile Include="AST\Bases\Node.cs" />
     <Compile Include="AST\ProgramNode.cs" />
@@ -90,6 +95,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <None Include="packages.config" />
     <None Include="StandardLib\Standard.tl">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

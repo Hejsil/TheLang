@@ -41,9 +41,10 @@ namespace TheLang.Syntax
         public Scanner(TextReader stream)
         {
             _program = stream.ReadToEnd();
+            stream.Dispose();
         }
 
-        public Token Eat()
+        public Token EatToken()
         {
             if (_tokenQueue.Count != 0)
                 return _tokenQueue.Dequeue();
@@ -51,7 +52,7 @@ namespace TheLang.Syntax
             return GetNextToken();
         }
 
-        public Token Peek(int offset = 0)
+        public Token PeekToken(int offset = 0)
         {
             while (_tokenQueue.Count <= offset)
                 _tokenQueue.Enqueue(GetNextToken());

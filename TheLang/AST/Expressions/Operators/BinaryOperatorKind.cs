@@ -2,35 +2,36 @@
 {
     public enum BinaryOperatorKind : byte
     {
-        // The first four bits represents the priority of that operator.
+        // The first four bits represents the priority and assosiativity of that operator.
+        // If the priority is even, then the associativity is Left-To-Right, else it is Right-To-Left.
         // The last four bits are used to make sure operators are uniquely represented.
-        Dot = 0x00,
+        Dot = 0x10,
 
-        As = 0x10,
+        As = 0x20,
 
-        Times = 0x20,
-        Divide = 0x21,
-        Modulo = 0x22,
+        Times = 0x40,
+        Divide = 0x41,
+        Modulo = 0x42,
 
-        Plus = 0x30,
-        Minus = 0x31,
+        Plus = 0x60,
+        Minus = 0x61,
 
-        LessThan = 0x40,
-        LessThanEqual = 0x41,
-        GreaterThan = 0x42,
-        GreaterThanEqual = 0x43,
+        LessThan = 0x80,
+        LessThanEqual = 0x81,
+        GreaterThan = 0x82,
+        GreaterThanEqual = 0x83,
 
-        Equal = 0x50,
-        NotEqual = 0x51,
+        Equal = 0xA0,
+        NotEqual = 0xA1,
 
-        And = 0x60,
-        Or = 0x61,
+        And = 0xC0,
+        Or = 0xC1,
 
-        Assign = 0x70,
-        PlusAssign = 0x71,
-        MinusAssign = 0x72,
-        TimesAssign = 0x73,
-        DivideAssign = 0x74,
-        ModulusAssign = 0x75
+        Assign = 0xD0,
+        PlusAssign = 0xD1,
+        MinusAssign = 0xD2,
+        TimesAssign = 0xD3,
+        DivideAssign = 0xD4,
+        ModulusAssign = 0xD5
     }
 }
