@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 
 namespace TheLang.Semantics.TypeChecking.Types
 {
-    public class ProcedureType : Type
+    public class ProcedureType : TypeInfo
     {
-        public ProcedureType(int size, bool isFunction, Type returnType, IEnumerable<Type> argumentTypes) 
+        public ProcedureType(int size, bool isFunction, TypeInfo returnType, IEnumerable<TypeInfo> argumentTypes) 
             : base(size)
         {
             IsFunction = isFunction;
@@ -17,8 +17,8 @@ namespace TheLang.Semantics.TypeChecking.Types
         }
 
         public bool IsFunction { get; }
-        public Type ReturnType { get; }
-        public IEnumerable<Type> ArgumentTypes { get; }
+        public TypeInfo ReturnType { get; }
+        public IEnumerable<TypeInfo> ArgumentTypes { get; }
 
         public override bool Equals(object obj) => 
             obj is ProcedureType p && 
@@ -26,8 +26,7 @@ namespace TheLang.Semantics.TypeChecking.Types
             IsFunction == p.IsFunction && 
             ReturnType.Equals(p.ReturnType) && 
             ArgumentTypes.SequenceEqual(p.ArgumentTypes);
-
-        public override int GetHashCode() => ToString().GetHashCode();
+        
         public override string ToString()
         {
             var funcPrefix = IsFunction ? "func" : "proc";

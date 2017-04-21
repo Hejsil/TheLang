@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace TheLang.Semantics.TypeChecking.Types
 {
-    public class BooleanType : Type
+    public class BooleanType : TypeInfo
     {
         public BooleanType(int size) 
             : base(size)
@@ -16,8 +16,7 @@ namespace TheLang.Semantics.TypeChecking.Types
         public override bool Equals(object obj) => 
             obj is BooleanType b && 
             Size == b.Size;
-
-        public override int GetHashCode() => ToString().GetHashCode();
+        
         public override string ToString() => $"Bool{Size}";
     }
 }

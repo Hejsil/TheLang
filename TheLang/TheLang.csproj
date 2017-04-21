@@ -67,8 +67,9 @@
     <Compile Include="Semantics\TypeChecking\Types\PointerType.cs" />
     <Compile Include="Semantics\TypeChecking\Types\ProcedureType.cs" />
     <Compile Include="Semantics\TypeChecking\Types\TupleType.cs" />
-    <Compile Include="Semantics\TypeChecking\Types\Type.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\TypeInfo.cs" />
     <Compile Include="Semantics\TypeChecking\Types\Nothing.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\TypeType.cs" />
     <Compile Include="Semantics\Visitor.cs" />
     <Compile Include="AST\Bases\Node.cs" />
     <Compile Include="AST\ProgramNode.cs" />

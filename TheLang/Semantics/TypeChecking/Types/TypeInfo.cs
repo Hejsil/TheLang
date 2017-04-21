@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 
 namespace TheLang.Semantics.TypeChecking.Types
 {
-    public abstract class Type
+    public abstract class TypeInfo
     {
-        protected Type(int size)
+        protected TypeInfo(int size)
         {
             Size = size;
         }
@@ -16,7 +16,7 @@ namespace TheLang.Semantics.TypeChecking.Types
         public int Size { get; }
 
         public abstract override bool Equals(object obj);
-        public abstract override int GetHashCode();
         public abstract override string ToString();
+        public override int GetHashCode() => ToString().GetHashCode();
     }
 }

@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace TheLang.Semantics.TypeChecking.Types
 {
-    public class FloatType : Type
+    public class FloatType : TypeInfo
     {
         public FloatType(int size) 
             : base(size)
@@ -16,8 +16,7 @@ namespace TheLang.Semantics.TypeChecking.Types
         public override bool Equals(object obj) => 
             obj is FloatType f && 
             Size == f.Size;
-
-        public override int GetHashCode() => ToString().GetHashCode();
+        
         public override string ToString() => $"Float{Size}";
     }
 }

@@ -6,16 +6,16 @@ using System.Threading.Tasks;
 
 namespace TheLang.Semantics.TypeChecking.Types
 {
-    public class PointerType : Type
+    public class PointerType : TypeInfo
     {
-        public PointerType(int size, Type pointingTo, PointerKind kind) 
+        public PointerType(int size, TypeInfo pointingTo, PointerKind kind) 
             : base(size)
         {
             PointingTo = pointingTo;
             Kind = kind;
         }
 
-        public Type PointingTo { get; }
+        public TypeInfo PointingTo { get; }
         public PointerKind Kind { get; }
 
         public override bool Equals(object obj) => 
@@ -23,8 +23,7 @@ namespace TheLang.Semantics.TypeChecking.Types
             Size == p.Size && 
             Kind == p.Kind && 
             PointingTo.Equals(p.PointingTo);
-
-        public override int GetHashCode() => ToString().GetHashCode();
+        
         public override string ToString() => $"Float{Size}";
 
         public enum PointerKind

@@ -21,17 +21,13 @@ Bool8 :: #type(#bool, 8)
 Bool  :: Bool8
 
 Array :: struct {
-	#file_scope {
-		capacity : Int
-		items    : @UInt8
-	}
+	capacity : Int
+	items    : @UInt8
 }
 
 String :: struct {
-	#file_scope {
-		capacity : Int
-		count    : Int
-		items    : @UInt8
-	}
+	capacity : Int
+	count    : Int
+	items    : @UInt8
 }
 

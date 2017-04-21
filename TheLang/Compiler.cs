@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using TheLang.AST.Bases;
+using TheLang.Semantics.TypeChecking.Types;
 using TheLang.Syntax;
 
 namespace TheLang
@@ -10,18 +11,15 @@ namespace TheLang
     {
         private readonly HashSet<string> _filesInProject = new HashSet<string>();
         private readonly Queue<string> _filesToCompile = new Queue<string>();
-        private readonly Dictionary<string, Type> _types = new Dictionary<string, Type>();
 
-        private Compiler() { }
+        private Compiler()
+        { }
 
         public void AddFileToProject(string fileName)
         {
             if (!_filesInProject.Add(fileName))
                 _filesToCompile.Enqueue(fileName);
         }
-
-        public bool TryGetType(string id, out Type result) => _types.TryGetValue(id, out result);
-        public void AddType(string id, Type type) => _types.Add(id, type);
 
 
         private bool Compile()

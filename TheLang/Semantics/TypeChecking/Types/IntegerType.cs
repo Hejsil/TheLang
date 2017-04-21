@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace TheLang.Semantics.TypeChecking.Types
 {
-    public class IntegerType : Type
+    public class IntegerType : TypeInfo
     {
         public IntegerType(int size, bool isSigned) 
             : base(size)
@@ -20,8 +20,7 @@ namespace TheLang.Semantics.TypeChecking.Types
             obj is IntegerType i && 
             IsSigned == i.IsSigned && 
             Size == i.Size;
-
-        public override int GetHashCode() => ToString().GetHashCode();
+        
         public override string ToString() => IsSigned ? $"Int{Size}" : $"UInt{Size}";
     }
 }

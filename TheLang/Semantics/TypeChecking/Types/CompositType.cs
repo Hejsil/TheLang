@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace TheLang.Semantics.TypeChecking.Types
 {
-    public class CompositType : Type
+    public class CompositType : TypeInfo
     {
         public CompositType(int size, IEnumerable<Field> fields) 
             : base(size)
@@ -28,10 +28,9 @@ namespace TheLang.Semantics.TypeChecking.Types
         public class Field
         {
             public string Name { get; set; }
-            public Type Type { get; set; }
+            public TypeInfo Type { get; set; }
 
             public override bool Equals(object obj) => obj is Field f && Name == f.Name && Type.Equals(f.Type);
-            public override int GetHashCode() => ToString().GetHashCode();
             public override string ToString() => $"{Name}:{Type}";
         }
     }

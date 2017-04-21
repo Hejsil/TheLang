@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace TheLang.Semantics.TypeChecking.Types
 {
-    public class Nothing : Type
+    public class Nothing : TypeInfo
     {
 
         public Nothing() 
@@ -16,7 +16,6 @@ namespace TheLang.Semantics.TypeChecking.Types
 
 
         public override bool Equals(object obj) => obj is Nothing;
-        public override int GetHashCode() => ToString().GetHashCode();
         public override string ToString() => "Nothing";
     }
 }
