@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using TheLang.AST;
 using TheLang.AST.Bases;
 using TheLang.AST.Expressions;
@@ -41,28 +41,7 @@ namespace TheLang.Syntax
                     if (!TryParseDeclaration(out var declaration))
                         return false;
 
-                    peek = PeekToken();
-                    switch (peek.Kind)
-                    {
-                        case TokenKind.Equal:
-                        case TokenKind.Colon:
-                            EatToken();
-                            if (!TryParseExpression(out var expression))
-                                return false;
-
-                            declarations.Add(
-                                new Variable(peek.Position, peek.Kind == TokenKind.Colon)
-                                {
-                                    DeclaredType = declaration.DeclaredType,
-                                    Name = declaration.Name,
-                                    Value = expression
-                                });
-
-                            break;
-                        default:
-                            declarations.Add(declaration);
-                            break;
-                    }
+                    declarations.Add(declaration);
                 }
                 else
                 {
@@ -96,17 +75,56 @@ namespace TheLang.Syntax
             }
 
             Node type;
-            var next = PeekToken();
-            if (next.Kind == TokenKind.Colon || next.Kind == TokenKind.Equal)
+            var colonOrEqual = PeekToken();
+            switch (colonOrEqual.Kind)
             {
-                type = new NeedsToBeInfered(next.Position);
-            }
-            else
-            {
-                if (!TryParseExpression(out type))
-                    return false;
+                case TokenKind.Colon:
+                case TokenKind.Equal:
+                    type = new NeedsToBeInfered(colonOrEqual.Position);
+                    break;
+                default:
+                    if (!TryParseExpression(out type))
+                        return false;
+
+                    break;
             }
 
+
+            if (TryEatToken(TokenKind.Colon, out colonOrEqual))
+            {
+                if (TryEatToken(TokenKind.KeywordStruct))
+                {
+
+
+                    return true;
+                }
+
+                if (!TryParseExpression(out var expression))
+                    return false;
+
+                result = new Variable(colonOrEqual.Position, colonOrEqual.Kind == TokenKind.Colon)
+                {
+                    DeclaredType = type,
+                    Name = identifier.Value,
+                    Value = expression
+                };
+                return true;
+            }
+
+
+            if (TryEatToken(TokenKind.Equal, out colonOrEqual))
+            {
+                if (!TryParseExpression(out var expression))
+                    return false;
+
+                result = new Variable(colonOrEqual.Position, colonOrEqual.Kind == TokenKind.Colon)
+                {
+                    DeclaredType = type,
+                    Name = identifier.Value,
+                    Value = expression
+                };
+                return true;
+            }
 
             result = new Declaration(identifier.Position)
             {
@@ -114,6 +132,7 @@ namespace TheLang.Syntax
                 Name = identifier.Value
             };
             return true;
+
         }
 
         private bool TryParseExpression(out Node result)
@@ -222,11 +241,10 @@ namespace TheLang.Syntax
                     {
                         unary.Child = child;
                         unary = (UnaryNode)unary.Child;
+                        continue;
                     }
-                    else
-                    {
-                        break;
-                    }
+
+                    break;
                 }
             }
 
@@ -239,13 +257,9 @@ namespace TheLang.Syntax
 
             for (;;)
             {
-                var peek = PeekToken();
-
-                if (peek.Kind == TokenKind.CurlyLeft)
+                if (TryEatToken(TokenKind.CurlyLeft))
                 {
                     #region Parsing indexing
-
-                    EatToken();
                     var assignments = new List<BinaryOperator>();
 
                     while (TryEatToken(TokenKind.Identifier, out var identifier))
@@ -272,24 +286,23 @@ namespace TheLang.Syntax
                             break;
                     }
 
-                    if (!TryEatToken(TokenKind.CurlyRight, out peek))
+                    if (!TryEatToken(TokenKind.CurlyRight, out var curlyRight))
                     {
-                        _compiler.ReportError(peek.Position,
-                            $"Did not find the end of the composit type literal. Expected {TokenKind.CurlyRight}, but got {peek.Kind}.");
+                        _compiler.ReportError(curlyRight.Position,
+                            $"Did not find the end of the composit type literal. Expected {TokenKind.CurlyRight}, but got {curlyRight.Kind}.");
                         return false;
                     }
 
                     leaf = new CompositTypeLiteral(leaf.Position) { Child = leaf, Values = assignments };
+                    continue;
 
                     #endregion
                 }
-                else if (peek.Kind == TokenKind.ParenthesesLeft)
+
+                if (TryEatToken(TokenKind.ParenthesesLeft))
                 {
                     #region Parsing call
-
-                    EatToken();
                     var arguments = new List<Node>();
-
                     while (!TryEatToken(TokenKind.ParenthesesRight))
                     {
                         if (arguments.Count != 0 && !TryEatToken(TokenKind.Comma, out var comma))
@@ -306,13 +319,12 @@ namespace TheLang.Syntax
                     }
 
                     leaf = new Call(leaf.Position) { Child = leaf, Arguments = arguments };
+                    continue;
 
                     #endregion
                 }
-                else
-                {
-                    break;
-                }
+
+                break;
             }
 
             if (unary != null)
@@ -328,33 +340,32 @@ namespace TheLang.Syntax
         private bool TryParseTerm(out Node result)
         {
             result = null;
-            var start = EatToken();
 
-            if (start.Kind == TokenKind.Identifier)
+            if (TryEatToken(TokenKind.Identifier, out var start))
             {
                 result = new Symbol(start.Position, start.Value);
                 return true;
             }
 
-            if (start.Kind == TokenKind.FloatNumber)
+            if (TryEatToken(TokenKind.FloatNumber, out start))
             {
                 result = new FloatLiteral(start.Position, double.Parse(start.Value));
                 return true;
             }
 
-            if (start.Kind == TokenKind.DecimalNumber)
+            if (TryEatToken(TokenKind.DecimalNumber, out start))
             {
                 result = new IntegerLiteral(start.Position, int.Parse(start.Value));
                 return true;
             }
             
-            if (start.Kind == TokenKind.String)
+            if (TryEatToken(TokenKind.String, out start))
             {
                 result = new StringLiteral(start.Position, start.Value);
                 return true;
             }
 
-            if (start.Kind == TokenKind.ParenthesesLeft)
+            if (TryEatToken(TokenKind.ParenthesesLeft, out start))
             {
                 if (!TryParseExpression(out result))
                     return false;
@@ -367,7 +378,7 @@ namespace TheLang.Syntax
                 return false;
             }
 
-            if (start.Kind == TokenKind.KeywordFunction || start.Kind == TokenKind.KeywordProcedure)
+            if (TryEatToken(TokenKind.KeywordFunction, out start) || TryEatToken(TokenKind.KeywordProcedure, out start))
             {
                 if (!TryEatToken(TokenKind.ParenthesesLeft, out var parLeft))
                 {
@@ -403,9 +414,8 @@ namespace TheLang.Syntax
                 {
                     returnType = new NeedsToBeInfered(arrow.Position);
                 }
-
-                var peek = PeekToken();
-                switch (peek.Kind)
+                
+                switch (PeekToken().Kind)
                 {
                     case TokenKind.CurlyLeft:
                         if (!TryParseCodeBlock(out var block))
@@ -446,34 +456,14 @@ namespace TheLang.Syntax
 
             var statements = new List<Node>();
 
-            while (!TryEatToken(TokenKind.CurlyRight, out var peek))
+            while (!TryEatToken(TokenKind.CurlyRight))
             {
                 if (PeekIs(TokenKind.Identifier) && PeekIs(TokenKind.Colon, 1))
                 {
                     if (!TryParseDeclaration(out var declaration))
                         return false;
 
-                    peek = PeekToken();
-                    switch (peek.Kind)
-                    {
-                        case TokenKind.Equal:
-                        case TokenKind.Colon:
-                            if (!TryParseExpression(out var expression))
-                                return false;
-
-                            statements.Add(
-                                new Variable(peek.Position, peek.Kind == TokenKind.Colon)
-                                {
-                                    DeclaredType = declaration.DeclaredType,
-                                    Name = declaration.Name,
-                                    Value = expression
-                                });
-
-                            break;
-                        default:
-                            statements.Add(declaration);
-                            break;
-                    }
+                    statements.Add(declaration);
                 }
                 else
                 {
@@ -503,7 +493,7 @@ namespace TheLang.Syntax
             if (result.Kind != expectedKind)
                 return false;
 
-            EatToken();
+            Debug.Assert(EatToken().Kind == result.Kind);
             return true;
         }
 
@@ -514,16 +504,12 @@ namespace TheLang.Syntax
         /// <returns></returns>
         private bool TryEatToken(TokenKind expectedKind) => TryEatToken(expectedKind, out var _);
 
-        private bool IsBinaryOperator(TokenKind kind)
-        {
-            var operators = (BinaryOperatorKind[])Enum.GetValues(typeof(BinaryOperatorKind));
-            return operators.Contains((BinaryOperatorKind)kind);
-        }
-
-        private bool IsUnaryOperator(TokenKind kind)
-        {
-            var operators = (UnaryOperatorKind[])Enum.GetValues(typeof(UnaryOperatorKind));
-            return operators.Contains((UnaryOperatorKind)kind);
-        }
+        private static readonly HashSet<BinaryOperatorKind> BinaryOperators = 
+            new HashSet<BinaryOperatorKind>((BinaryOperatorKind[])Enum.GetValues(typeof(BinaryOperatorKind)));
+        private bool IsBinaryOperator(TokenKind kind) => BinaryOperators.Contains((BinaryOperatorKind)kind);
+        
+        private static readonly HashSet<UnaryOperatorKind> UnaryOperators =
+            new HashSet<UnaryOperatorKind>((UnaryOperatorKind[])Enum.GetValues(typeof(UnaryOperatorKind)));
+        private bool IsUnaryOperator(TokenKind kind) => UnaryOperators.Contains((UnaryOperatorKind)kind);
     }
 }

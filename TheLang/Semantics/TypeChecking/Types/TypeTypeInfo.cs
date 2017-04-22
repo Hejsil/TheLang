@@ -12,10 +12,12 @@ namespace TheLang.Semantics.TypeChecking.Types
             Type = type;
         }
 
-        protected bool Equals(TypeTypeInfo other) => Equals(Type, other.Type);
+        protected bool Equals(TypeTypeInfo other) => 
+            Equals(Type, other.Type);
 
         public override bool Equals(object obj) =>
-            base.Equals(obj) && Equals((TypeTypeInfo)obj);
+            base.Equals(obj) && 
+            Equals((TypeTypeInfo)obj);
 
         public override int GetHashCode() =>
             HashCodeHelper.Initialize()

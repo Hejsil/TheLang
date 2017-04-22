@@ -44,9 +44,7 @@ namespace TheLang.Tests
             var compiler = new Compiler();
 
             using (var str = new StringReader($"test :: {expression}"))
-            {
                 Assert.True(compiler.ParseProgram(str));
-            }
 
             var variable = compiler.Tree.Files.First().Declarations.First() as Variable;
             Assert.NotNull(variable);
@@ -78,9 +76,7 @@ namespace TheLang.Tests
             var compiler = new Compiler();
 
             using (var str = new StringReader($"test :: {expression}"))
-            {
                 Assert.True(compiler.ParseProgram(str));
-            }
 
             var variable = compiler.Tree.Files.First().Declarations.First() as Variable;
             Assert.NotNull(variable);

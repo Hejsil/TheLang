@@ -71,12 +71,12 @@ namespace TheLang.Syntax
             {
                 if (EatChar('u'))
                 {
-                    EatChar();
+                    Debug.Assert(EatChar('@'));
                     return new Token(TokenKind.UAt, GetValue(startIndex), position);
                 }
                 if (EatChar('s'))
                 {
-                    EatChar();
+                    Debug.Assert(EatChar('@'));
                     return new Token(TokenKind.SAt, GetValue(startIndex), position);
                 }
             }
@@ -86,7 +86,7 @@ namespace TheLang.Syntax
                 while (EatChar(c => char.IsLetterOrDigit(c) || c == '_')) { }
 
                 var resultStr = GetValue(startIndex);
-                if (_keywords.TryGetValue(resultStr, out TokenKind kind))
+                if (_keywords.TryGetValue(resultStr, out var kind))
                     return new Token(kind, resultStr, position);
 
                 return new Token(TokenKind.Identifier, resultStr, position);
@@ -240,12 +240,10 @@ namespace TheLang.Syntax
             {
                 _line++;
                 _column = 0;
+                return true;
             }
-            else
-            {
-                _column++;
-            }
-            
+
+             _column++;
             return true;
         }
 
