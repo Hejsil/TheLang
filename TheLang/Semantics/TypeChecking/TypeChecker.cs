@@ -71,7 +71,14 @@ namespace TheLang.Semantics.TypeChecking
             if (!Visit(node.DeclaredType))
                 return false;
 
-            node.Type = node.DeclaredType.Type;
+            if (!(node.DeclaredType.Type is TypeTypeInfo type))
+            {
+                // TODO: Error message
+                _compiler.ReportError(node.Position, "");
+                return false;
+            }
+
+            node.Type = type.Type;
 
             var peekTable = _symbolTable.Peek();
             if (peekTable.ContainsKey(node.Name))
@@ -97,36 +104,44 @@ namespace TheLang.Semantics.TypeChecking
             {
                 node.Type = node.Value.Type;
             }
+            else if (!(node.DeclaredType.Type is TypeTypeInfo type))
+            {
+                // TODO: Error
+                _compiler.ReportError(node.Position, $"");
+                return false;
+            }
             else
             {
-                var declaredType = node.DeclaredType.Type;
+                var declaredType = type.Type;
                 var valueType = node.Value.Type;
 
                 if (declaredType.GetType() == valueType.GetType() &&
-                    (declaredType is IntegerTypeInfo || valueType is FloatTypeInfo))
+                    (declaredType is IntegerTypeInfo || declaredType is FloatTypeInfo))
                 {
+                    node.Type = declaredType.Size > valueType.Size ? declaredType : valueType;
 
+                    switch (node.Type)
+                    {
+                        case IntegerTypeInfo i:
+                            if (i.Size == TypeInfo.NeedToBeInferedSize)
+                                node.Type = GetTypeInfo(new IntegerTypeInfo(TypeInfo.Int64Size, i.IsSigned));
+                            break;
+                        case FloatTypeInfo f:
+                            if (f.Size == TypeInfo.NeedToBeInferedSize)
+                                node.Type = GetTypeInfo(new FloatTypeInfo(TypeInfo.Int64Size));
+                            break;
+                    }
                 }
                 else if (declaredType.Equals(valueType))
                 {
+                    node.Type = declaredType;
                 }
                 else
                 {
+                    // TODO: Error
                     _compiler.ReportError(node.Position, $"");
                     return false;
                 }
-            }
-
-            switch (node.Type)
-            {
-                case IntegerTypeInfo i:
-                    if (i.Size == TypeInfo.NeedToBeInferedSize)
-                        node.Type = GetTypeInfo(new IntegerTypeInfo(TypeInfo.Int64Size, i.IsSigned));
-                    break;
-                case FloatTypeInfo f:
-                    if (f.Size == TypeInfo.NeedToBeInferedSize)
-                        node.Type = GetTypeInfo(new FloatTypeInfo(TypeInfo.Int64Size));
-                    break;
             }
 
             var peekTable = _symbolTable.Peek();
@@ -175,8 +190,7 @@ namespace TheLang.Semantics.TypeChecking
                                 node.Type = GetTypeInfo(new IntegerTypeInfo(64, true));
                                 return true;
                             case "data":
-                                node.Type = GetTypeInfo(new PointerTypeInfo(GetTypeInfo(new IntegerTypeInfo(8, false)),
-                                    PointerKind.Weak));
+                                node.Type = GetTypeInfo(new PointerTypeInfo(GetTypeInfo(new IntegerTypeInfo(8, false)), PointerKind.Weak));
                                 return true;
                             default:
                                 _compiler.ReportError(node.Position,
@@ -207,6 +221,8 @@ namespace TheLang.Semantics.TypeChecking
             if (!Visit(node.Right))
                 return false;
 
+            var leftType = node.Left.Type;
+            var rightType = node.Right.Type;
             switch (node.Kind)
             {
                 case BinaryOperatorKind.As:
@@ -215,23 +231,17 @@ namespace TheLang.Semantics.TypeChecking
                     return false;
 
 
-                case BinaryOperatorKind.Assign:
                 case BinaryOperatorKind.PlusAssign:
                 case BinaryOperatorKind.MinusAssign:
                 case BinaryOperatorKind.TimesAssign:
                 case BinaryOperatorKind.DivideAssign:
                 case BinaryOperatorKind.ModulusAssign:
-                case BinaryOperatorKind.Times:
-                case BinaryOperatorKind.Divide:
-                case BinaryOperatorKind.Modulo:
-                case BinaryOperatorKind.Plus:
-                case BinaryOperatorKind.Minus:
-                case BinaryOperatorKind.LessThan:
-                case BinaryOperatorKind.LessThanEqual:
-                case BinaryOperatorKind.GreaterThan:
-                case BinaryOperatorKind.GreaterThanEqual:
-                    var leftType = node.Left.Type;
-                    var rightType = node.Right.Type;
+                {
+                    if (!(node.Left is Symbol) && !(node.Left is BinaryOperator b && b.Kind == BinaryOperatorKind.Dot))
+                    {
+                        _compiler.ReportError(node.Position, "Left side of assignment is not assignable.");
+                        return false;
+                    }
 
                     if (!(leftType is IntegerTypeInfo) && !(leftType is FloatTypeInfo))
                     {
@@ -250,7 +260,41 @@ namespace TheLang.Semantics.TypeChecking
                     if (leftType.GetType() != rightType.GetType())
                     {
                         _compiler.ReportError(node.Position,
-                            $"Left and right type are not compatible.");
+                            $"Left and right type are not compatible. Left is {leftType}, right is {rightType}");
+                        return false;
+                    }
+
+                    node.Type = leftType.Size > rightType.Size ? leftType : rightType;
+                    return true;
+                }
+
+                case BinaryOperatorKind.Times:
+                case BinaryOperatorKind.Divide:
+                case BinaryOperatorKind.Modulo:
+                case BinaryOperatorKind.Plus:
+                case BinaryOperatorKind.Minus:
+                case BinaryOperatorKind.LessThan:
+                case BinaryOperatorKind.LessThanEqual:
+                case BinaryOperatorKind.GreaterThan:
+                case BinaryOperatorKind.GreaterThanEqual:
+                    if (!(leftType is IntegerTypeInfo) && !(leftType is FloatTypeInfo))
+                    {
+                        _compiler.ReportError(node.Position,
+                            $"Left side of {node.Kind} is not an Int or Float.");
+                        return false;
+                    }
+
+                    if (!(rightType is IntegerTypeInfo) && !(rightType is FloatTypeInfo))
+                    {
+                        _compiler.ReportError(node.Position,
+                            $"Right side of {node.Kind} is not an Int or Float.");
+                        return false;
+                    }
+
+                    if (leftType.GetType() != rightType.GetType())
+                    {
+                        _compiler.ReportError(node.Position,
+                            $"Left and right type are not compatible. Left is {leftType}, right is {rightType}");
                         return false;
                     }
 
@@ -258,22 +302,84 @@ namespace TheLang.Semantics.TypeChecking
                     return true;
 
                 case BinaryOperatorKind.Equal:
-                    break;
-
                 case BinaryOperatorKind.NotEqual:
-                    break;
+                {
+                    if (leftType.GetType() != rightType.GetType())
+                    {
+                        _compiler.ReportError(node.Position, $"{rightType} is not equallity compareable to {rightType}.");
+                        return false;
+                    }
+
+                    if (leftType is IntegerTypeInfo || leftType is FloatTypeInfo)
+                    {
+                        node.Type = leftType.Size > rightType.Size ? leftType : rightType;
+                        return true;
+                    }
+
+                    if (!leftType.Equals(rightType))
+                    {
+                        _compiler.ReportError(node.Position, $"{rightType} is not equallity compareable to {rightType}.");
+                        return false;
+                    }
+
+                    node.Type = leftType;
+                    return true;
+                }
 
                 case BinaryOperatorKind.And:
-                    break;
-
                 case BinaryOperatorKind.Or:
-                    break;
+                    if (!(leftType is BooleanTypeInfo))
+                    {
+                        _compiler.ReportError(node.Position,
+                            $"Left side type is not compatible with the and operator. Expected Bool, but got {leftType}");
+                        return false;
+                    }
+
+                    if (!(rightType is BooleanTypeInfo))
+                    {
+                        _compiler.ReportError(node.Position,
+                            $"Right side type is not compatible with the and operator. Expected Bool, but got {rightType}");
+                        return false;
+                    }
+                    
+                    node.Type = leftType.Size > rightType.Size ? leftType : rightType;
+                    return true;
+
+                case BinaryOperatorKind.Assign:
+                {
+                    if (!(node.Left is Symbol) && !(node.Left is BinaryOperator b && b.Kind == BinaryOperatorKind.Dot))
+                    {
+                        _compiler.ReportError(node.Position, "Left side of assignment is not assignable.");
+                        return false;
+                    }
+
+                    if (leftType.GetType() != rightType.GetType())
+                    {
+                        _compiler.ReportError(node.Position,
+                            $"Left and right type are not compatible. Left is {leftType}, right is {rightType}");
+                        return false;
+                    }
+
+                    if (leftType is IntegerTypeInfo || leftType is FloatTypeInfo)
+                    {
+                        node.Type = leftType.Size > rightType.Size ? leftType : rightType;
+                        return true;
+                    }
+
+                    if (!leftType.Equals(rightType))
+                    {
+                        _compiler.ReportError(node.Position,
+                            $"{rightType} is not assignable to {rightType}.");
+                        return false;
+                    }
+
+                    node.Type = leftType;
+                    return true;
+                }
 
                 default:
                     throw new ArgumentOutOfRangeException();
             }
-
-            return true;
         }
 
         protected override bool Visit(UnaryOperator node)
@@ -283,7 +389,15 @@ namespace TheLang.Semantics.TypeChecking
 
         protected override bool Visit(Symbol node)
         {
-            throw new NotImplementedException();
+            if (TryFindSymbolTypeInfo(node.Name, out var result))
+            {
+                node.Type = result;
+                return true;
+            }
+
+            // TODO: Error
+            _compiler.ReportError(node.Position, $"");
+            return false;
         }
 
         protected override bool Visit(CompositTypeLiteral node)
