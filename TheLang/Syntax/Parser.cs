@@ -424,7 +424,7 @@ namespace TheLang.Syntax
                         result = new BlockBodyProcedure(start.Position, start.Kind == TokenKind.KeywordFunction)
                         {
                             Block = block,
-                            ReturnType = returnType,
+                            Return = returnType,
                             Arguments = arguments
                         };
                         return true;
@@ -433,7 +433,7 @@ namespace TheLang.Syntax
                 result = new ProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
                 {
                     Arguments = arguments,
-                    ReturnType = returnType
+                    Return = returnType
                 };
                 return true;
             }

@@ -13,7 +13,7 @@ namespace TheLang.AST.Expressions.Literals
         }
         
         public bool IsFunction { get; set; }
-        public Node ReturnType { get; set; }
+        public Node Return { get; set; }
         public IEnumerable<Node> Arguments { get; set; }
     }
 }

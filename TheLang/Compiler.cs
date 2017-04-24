@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using TheLang.AST;
 using TheLang.AST.Bases;
+using TheLang.Semantics.TypeChecking;
 using TheLang.Semantics.TypeChecking.Types;
 using TheLang.Syntax;
 
@@ -44,22 +45,12 @@ namespace TheLang
             return true;
         }
 
-        private bool ParserLoop(ICollection<FileNode> result)
+        public bool TypeCheck()
         {
-            while (_filesInProject.Count != 0)
-            {
-                var parser = new Parser(_filesToCompile.Dequeue(), this);
-
-                if (!parser.TryParseFile(out var fileNode))
-                    return false;
-
-                result.Add(fileNode);
-            }
-
-            return true;
+            var checker = new TypeChecker(this);
+            return checker.Visit(Tree);
         }
-
-
+        
         public void AddFileToProject(string fileName)
         {
             if (!_filesInProject.Add(fileName))
@@ -77,6 +68,21 @@ namespace TheLang
         {
             Console.Error.WriteLine(
                 $"Error at {position.FileName}:{position.Line}:{position.Column}: {message}");
+        }
+
+        private bool ParserLoop(ICollection<FileNode> result)
+        {
+            while (_filesInProject.Count != 0)
+            {
+                var parser = new Parser(_filesToCompile.Dequeue(), this);
+
+                if (!parser.TryParseFile(out var fileNode))
+                    return false;
+
+                result.Add(fileNode);
+            }
+
+            return true;
         }
     }
 }

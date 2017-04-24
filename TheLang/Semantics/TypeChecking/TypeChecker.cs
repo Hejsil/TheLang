@@ -107,7 +107,7 @@ namespace TheLang.Semantics.TypeChecking
                 var declaredType = type.Type;
                 var valueType = node.Value.Type;
 
-                if (!AreTypeCompatible(declaredType, valueType))
+                if (!ExpectType(declaredType, valueType))
                 {
                     _compiler.ReportError(node.Position, 
                         $"{valueType} is not assignable to {declaredType}.");
@@ -230,14 +230,14 @@ namespace TheLang.Semantics.TypeChecking
                         return false;
                     }
 
-                    if (!AreTypeCompatible(leftType, rightType))
+                    if (!ExpectType(leftType, rightType))
                     {
                         _compiler.ReportError(node.Position,
-                            $"{leftType} is not operator assignable to {rightType}.");
+                            $"{rightType} is not operator assignable to {leftType}.");
                         return false;
                     }
 
-                    node.Type = leftType.Size > rightType.Size ? leftType : rightType;
+                    node.Type = leftType;
                     return true;
                 }
 
@@ -309,10 +309,10 @@ namespace TheLang.Semantics.TypeChecking
                         return false;
                     }
                     
-                    if (!AreTypeCompatible(leftType, rightType))
+                    if (!ExpectType(leftType, rightType))
                     {
                         _compiler.ReportError(node.Position, 
-                            $"{leftType} is not assignable to {rightType}.");
+                            $"{rightType} is not assignable to {leftType}.");
                             return false;
                     }
 
@@ -355,48 +355,44 @@ namespace TheLang.Semantics.TypeChecking
             if (!VisitCollection(node.Arguments))
                 return false;
 
-            if (!(node.Child.Type is ProcedureTypeInfo procedure))
+            if (!(node.Child.Type is ProcedureTypeInfo procTypeInfo))
             {
                 _compiler.ReportError(node.Position, $"Cannot call {node.Type}.");
                 return false;
             }
             
-            var zip = node.Arguments.Zip(procedure.ArgumentTypes, (n, t) => (n, t));
+            var zip = node.Arguments.Zip(procTypeInfo.ArgumentTypes, (n, t) => (n, t));
 
             var index = 1;
             foreach (var (argument, expectedType) in zip)
             {
                 var actualType = argument.Type;
 
-                if (actualType is IntegerTypeInfo || expectedType is FloatTypeInfo)
+                if (!ExpectType(expectedType, actualType))
                 {
-                    break;
-                }
-
-                if (actualType.GetType() != expectedType.GetType())
-                {
-
                     _compiler.ReportError(argument.Position, $"Argument {index} was cannot be passed to procedure. Expected {expectedType}, but got {actualType}.");
                     return false;
-                }
-
-                if (actualType is IntegerTypeInfo || expectedType is FloatTypeInfo)
-                {
-                    break;
                 }
 
                 index++;
             }
 
-            throw new NotImplementedException();
+            node.Type = procTypeInfo.ReturnType;
+            return true;
         }
 
         protected override bool Visit(ProcedureLiteral node)
         {
-            throw new NotImplementedException();
+            if (!Visit(node.Return))
+                return false;
+            if (!VisitCollection(node.Arguments))
+                return false;
+
+            node.Type = new ProcedureTypeInfo(node.IsFunction, node.Return.Type, node.Arguments.Select(n => n.Type));
+            return true;
         }
 
-        private bool AreTypeCompatible(TypeInfo type1, TypeInfo type2)
+        private static bool AreTypeCompatible(TypeInfo type1, TypeInfo type2)
         {
             if (type1 is FloatTypeInfo && type2 is FloatTypeInfo)
                 return true;
@@ -405,6 +401,17 @@ namespace TheLang.Semantics.TypeChecking
                 return itype1.IsSigned == itype2.IsSigned;
 
             return type1.Equals(type2);
+        }
+
+        private static bool ExpectType(TypeInfo expected, TypeInfo actual)
+        {
+            if (expected is FloatTypeInfo && actual is FloatTypeInfo)
+                return expected.Size >= actual.Size;
+
+            if (expected is IntegerTypeInfo itype1 && actual is IntegerTypeInfo itype2)
+                return itype1.IsSigned == itype2.IsSigned && expected.Size >= actual.Size;
+
+            return expected.Equals(actual);
         }
 
         private TypeInfo GetTypeInfo(TypeInfo typeInfo)

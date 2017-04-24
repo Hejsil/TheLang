@@ -102,6 +102,15 @@ namespace TheLang.Tests
             }
         }
 
-        
+        [Test]
+        public void ProcedureParsing()
+        {
+            var compiler = new Compiler();
+            Assert.True(
+                compiler.ParseProgram(
+                    File.OpenText(@"D:\Dev\Projects\TheLang\TheLang.Tests\TestPrograms\ParserTests\ProcedureParsing\ShouldParse.tl")
+                )
+            );
+        }
     }
 }
