@@ -27,6 +27,15 @@ namespace TheLang.Syntax
             _compiler = compiler;
         }
 
+        /// <summary>
+        /// 
+        /// 
+        /// File syntax:
+        ///   File -> Declaration*
+        ///   
+        /// </summary>
+        /// <param name="result"></param>
+        /// <returns></returns>
         public bool TryParseFile(out FileNode result)
         {
             result = null;
@@ -56,6 +65,16 @@ namespace TheLang.Syntax
             return true;
         }
 
+        /// <summary>
+        /// 
+        /// 
+        /// Declaration syntax:
+        ///   Declaration -> Identifier ":" Expression
+        ///                | Identifier ":" Expression? ( ":" | "=" ) Expression
+        /// 
+        /// </summary>
+        /// <param name="result"></param>
+        /// <returns></returns>
         private bool TryParseDeclaration(out Declaration result)
         {
             result = null;
@@ -92,13 +111,6 @@ namespace TheLang.Syntax
 
             if (TryEatToken(TokenKind.Colon, out colonOrEqual))
             {
-                if (TryEatToken(TokenKind.KeywordStruct))
-                {
-
-                    // TODO: Parse struct
-                    return true;
-                }
-
                 if (!TryParseExpression(out var expression))
                     return false;
 
@@ -135,6 +147,14 @@ namespace TheLang.Syntax
 
         }
 
+        /// <summary>
+        /// 
+        /// Expression syntax:
+        ///   Expression -> Unary BinaryOperator Unary
+        ///
+        /// </summary>
+        /// <param name="result"></param>
+        /// <returns></returns>
         private bool TryParseExpression(out Node result)
         {
             result = null;
@@ -181,6 +201,19 @@ namespace TheLang.Syntax
             return true;
         }
 
+        /// <summary>
+        /// 
+        /// Unary syntax:
+        ///   Unary -> ( UnaryOperator | ArrayTypePrefix )* Term ( CompositTypeLiteral | Call | Indexing )*
+        ///   ArrayTypePrefix -> "[" ","* "]"
+        ///   CompositTypeLiteral -> "{" ( EqualsExpression ( "," EqualsExpression )* ","? )? "}"
+        ///   EqualsExpression -> Indentifier "=" Expression
+        ///   Call -> "(" ( Expression ( "," Expression )* )? ")"
+        ///   Indexing -> "[" Expression "]"
+        ///   
+        /// </summary>
+        /// <param name="result"></param>
+        /// <returns></returns>
         private bool TryParseUnary(out Node result)
         {
             #region Local Functions
@@ -259,7 +292,7 @@ namespace TheLang.Syntax
             {
                 if (TryEatToken(TokenKind.CurlyLeft))
                 {
-                    #region Parsing indexing
+                    #region Parsing CompositTypeLiteral
                     var assignments = new List<BinaryOperator>();
 
                     while (TryEatToken(TokenKind.Identifier, out var identifier))
@@ -324,6 +357,13 @@ namespace TheLang.Syntax
                     #endregion
                 }
 
+                if (TryEatToken(TokenKind.SquareLeft))
+                {
+                    // TODO: implement indexing
+                    _compiler.ReportError(leaf.Position, "Not Implemented");
+                    return false;
+                }
+
                 break;
             }
 
@@ -337,6 +377,25 @@ namespace TheLang.Syntax
             #endregion
         }
 
+        /// <summary>
+        /// 
+        /// Term syntax:
+        ///   Term -> Identifier
+        ///         | FloatNumber
+        ///         | DecimalNumber
+        ///         | String
+        ///         | "(" Expression ")"
+        ///         | "struct" "{" Declaration* "}"
+        ///         | ProcedureLiteral
+        ///         | ProcedureType
+        ///   
+        ///   ProcedureType -> ( "func" | "proc" ) "(" ( Expression ( "," Expression )* )? ")" Expression
+        ///   ProcedureLiteral -> ( "func" | "proc" ) "(" ( Declaration ( "," Declaration )* )? ")" Expression "=>" CodeBlock
+        ///                     | "(" ( Identifier ( "," Identifier )* )? ")" "=>" CodeBlock
+        /// 
+        /// </summary>
+        /// <param name="result"></param>
+        /// <returns></returns>
         private bool TryParseTerm(out Node result)
         {
             result = null;
@@ -377,7 +436,15 @@ namespace TheLang.Syntax
                     $"Could not find a pair for the left parentheses at {start.Position.Line}:{start.Position.Column}. Expected {TokenKind.ParenthesesRight}, but got {parRight.Kind}.");
                 return false;
             }
+            
+            if (TryEatToken(TokenKind.KeywordStruct))
+            {
+                // TODO: implement indexing
+                _compiler.ReportError(start.Position, "Not Implemented");
+                return false;
+            }
 
+            // TODO: This does not parse correctly
             if (TryEatToken(TokenKind.KeywordFunction, out start) || TryEatToken(TokenKind.KeywordProcedure, out start))
             {
                 if (!TryEatToken(TokenKind.ParenthesesLeft, out var parLeft))
@@ -403,31 +470,22 @@ namespace TheLang.Syntax
 
                     arguments.Add(argument);
                 }
-
-                Node returnType;
-                if (TryEatToken(TokenKind.Arrow, out var arrow))
-                {
-                    if (!TryParseExpression(out returnType))
-                        return false;
-                }
-                else
-                {
-                    returnType = new NeedsToBeInfered(arrow.Position);
-                }
                 
-                switch (PeekToken().Kind)
+                if (!TryParseExpression(out var returnType))
+                    return false;
+                
+                if (TryEatToken(TokenKind.Arrow))
                 {
-                    case TokenKind.CurlyLeft:
-                        if (!TryParseCodeBlock(out var block))
-                            return false;
+                    if (!TryParseCodeBlock(out var block))
+                        return false;
 
-                        result = new ProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
-                        {
-                            Block = block,
-                            Return = returnType,
-                            Arguments = arguments
-                        };
-                        return true;
+                    result = new TypedProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
+                    {
+                        Block = block,
+                        Return = returnType,
+                        Arguments = arguments.ConvertAll(i => (Declaration)i)
+                    };
+                    return true;
                 }
 
                 result = new ProcedureTypeNode(start.Position, start.Kind == TokenKind.KeywordFunction)
@@ -443,6 +501,11 @@ namespace TheLang.Syntax
             return false;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="result"></param>
+        /// <returns></returns>
         private bool TryParseCodeBlock(out CodeBlock result)
         {
             result = null;

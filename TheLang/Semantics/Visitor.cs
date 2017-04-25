@@ -16,7 +16,7 @@ namespace TheLang.Semantics
         {
             switch (node)
             {
-                case ProcedureLiteral n:
+                case TypedProcedureLiteral n:
                     return Visit(n);
                 case CompositTypeLiteral n:
                     return Visit(n);

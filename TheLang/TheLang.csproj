@@ -45,10 +45,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include=".OBeautifulCode.Recipes\OBeautifulCode.Math\HashCodeHelper.cs" />
     <Compile Include="AST\Bases\BinaryNode.cs" />
     <Compile Include="AST\Expressions\Call.cs" />
-    <Compile Include="AST\Expressions\Literals\ProcedureLiteral.cs" />
+    <Compile Include="AST\Expressions\Literals\TypedProcedureLiteral.cs" />
     <Compile Include="AST\Expressions\Literals\CompositTypeLiteral.cs" />
     <Compile Include="AST\Expressions\Literals\FloatLiteral.cs" />
     <Compile Include="AST\Expressions\Literals\IntegerLiteral.cs" />
@@ -97,10 +96,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <None Include="Examples\Syntax.tl" />
     <None Include="packages.config" />
-    <None Include="StandardLib\Standard.tl">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

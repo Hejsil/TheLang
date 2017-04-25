@@ -111,10 +111,7 @@ namespace TheLang.Syntax
                 case '+':
                     return new Token(EatChar('=') ? TokenKind.PlusEqual : TokenKind.Plus, GetValue(startIndex), position);
                 case '-':
-                    if (!EatChar('>'))
-                        return new Token(EatChar('=') ? TokenKind.MinusEqual : TokenKind.Minus, GetValue(startIndex), position);
-                    
-                    return new Token(TokenKind.Arrow, GetValue(startIndex), position);
+                    return new Token(EatChar('=') ? TokenKind.MinusEqual : TokenKind.Minus, GetValue(startIndex), position);
                 case '*':
                     return new Token(EatChar('=') ? TokenKind.TimesEqual : TokenKind.Times, GetValue(startIndex), position);
                 case '/':
@@ -124,6 +121,9 @@ namespace TheLang.Syntax
                 case '^':
                     return new Token(EatChar('=') ? TokenKind.ExponentEqual : TokenKind.Exponent, GetValue(startIndex), position);
                 case '=':
+                    if (EatChar('>'))
+                        return new Token(TokenKind.Arrow, GetValue(startIndex), position);
+
                     return new Token(EatChar('=') ? TokenKind.EqualEqual : TokenKind.Equal, GetValue(startIndex), position);
                 case '<':
                     return new Token(EatChar('=') ? TokenKind.LessThanEqual : TokenKind.LessThan, GetValue(startIndex), position);
