@@ -45,6 +45,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include=".OBeautifulCode.Recipes\OBeautifulCode.Math\HashCodeHelper.cs" />
     <Compile Include="AST\Bases\BinaryNode.cs" />
     <Compile Include="AST\Expressions\Call.cs" />
     <Compile Include="AST\Expressions\Literals\TypedProcedureLiteral.cs" />

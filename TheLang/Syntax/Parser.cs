@@ -216,46 +216,6 @@ namespace TheLang.Syntax
         /// <returns></returns>
         private bool TryParseUnary(out Node result)
         {
-            #region Local Functions
-
-            bool TryParseUnaryOperatorOrArrayTypePrefix(out UnaryNode prefix)
-            {
-                var peekToken = PeekToken();
-
-                if (IsUnaryOperator(peekToken.Kind))
-                {
-                    EatToken();
-                    prefix = new UnaryOperator(peekToken.Position, (UnaryOperatorKind)peekToken.Kind);
-                    return true;
-                }
-
-                if (TryEatToken(TokenKind.SquareLeft, out var first))
-                {
-                    var dimensions = 1;
-                    while (TryEatToken(TokenKind.Comma))
-                        dimensions++;
-
-                    if (TryEatToken(TokenKind.SquareRight, out var last))
-                    {
-                        prefix = null;
-
-                        _compiler.ReportError(last.Position, 
-                            $"Could not find the end of the array prefix. Expected {TokenKind.SquareRight}, but got {last.Kind}.");
-                        return false;
-                    }
-
-                    prefix = new ArrayPostfix(first.Position, dimensions);
-                    return true;
-                }
-
-                prefix = null;
-                return true;
-            }
-
-            #endregion
-
-            #region Parsing unary prefixes
-
             result = null;
 
             if (!TryParseUnaryOperatorOrArrayTypePrefix(out var unary))
@@ -281,18 +241,13 @@ namespace TheLang.Syntax
                 }
             }
 
-            #endregion
-
             if (!TryParseTerm(out var leaf))
                 return false;
-
-            #region Parsing unary postfixes
-
+            
             for (;;)
             {
                 if (TryEatToken(TokenKind.CurlyLeft))
                 {
-                    #region Parsing CompositTypeLiteral
                     var assignments = new List<BinaryOperator>();
 
                     while (TryEatToken(TokenKind.Identifier, out var identifier))
@@ -328,13 +283,10 @@ namespace TheLang.Syntax
 
                     leaf = new CompositTypeLiteral(leaf.Position) { Child = leaf, Values = assignments };
                     continue;
-
-                    #endregion
                 }
 
                 if (TryEatToken(TokenKind.ParenthesesLeft))
                 {
-                    #region Parsing call
                     var arguments = new List<Node>();
                     while (!TryEatToken(TokenKind.ParenthesesRight))
                     {
@@ -353,8 +305,6 @@ namespace TheLang.Syntax
 
                     leaf = new Call(leaf.Position) { Child = leaf, Arguments = arguments };
                     continue;
-
-                    #endregion
                 }
 
                 if (TryEatToken(TokenKind.SquareLeft))
@@ -374,7 +324,40 @@ namespace TheLang.Syntax
 
             return true;
 
-            #endregion
+            
+            bool TryParseUnaryOperatorOrArrayTypePrefix(out UnaryNode prefix)
+            {
+                var peekToken = PeekToken();
+
+                if (IsUnaryOperator(peekToken.Kind))
+                {
+                    EatToken();
+                    prefix = new UnaryOperator(peekToken.Position, (UnaryOperatorKind)peekToken.Kind);
+                    return true;
+                }
+
+                if (TryEatToken(TokenKind.SquareLeft, out var first))
+                {
+                    var dimensions = 1;
+                    while (TryEatToken(TokenKind.Comma))
+                        dimensions++;
+
+                    if (TryEatToken(TokenKind.SquareRight, out var last))
+                    {
+                        prefix = null;
+
+                        _compiler.ReportError(last.Position,
+                            $"Could not find the end of the array prefix. Expected {TokenKind.SquareRight}, but got {last.Kind}.");
+                        return false;
+                    }
+
+                    prefix = new ArrayPostfix(first.Position, dimensions);
+                    return true;
+                }
+
+                prefix = null;
+                return true;
+            }
         }
 
         /// <summary>
@@ -453,47 +436,107 @@ namespace TheLang.Syntax
                         $"Could not find the start parentheses at the start of a procedure's argument. Expected {TokenKind.ParenthesesLeft}, but got {parLeft.Kind}.");
                     return false;
                 }
-                
-                var arguments = new List<Node>();
 
-                while (!TryEatToken(TokenKind.ParenthesesRight))
+                // We can't determin from the arguments whether we are a procedure type or literal, if we have no arguments.
+                // We therefore have to handle the empty procedure differently
+                if (TryEatToken(TokenKind.ParenthesesRight))
                 {
-                    if (arguments.Count != 0 && !TryEatToken(TokenKind.Comma, out var comma))
-                    {
-                        _compiler.ReportError(comma.Position,
-                            $"Found an unexpected token when parsing a procedure's arguments. Expected {TokenKind.Comma}, but got {comma.Kind}.");
+                    if (!TryParseExpression(out var returnType))
                         return false;
+                    
+                    if (TryEatToken(TokenKind.Arrow, out var arrow))
+                    {
+                        if (!TryParseCodeBlock(out var block))
+                            return false;
+
+                        result = new TypedProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
+                        {
+                            Block = block,
+                            Return = returnType,
+                            Arguments = new Declaration[0]
+                        };
+                        return true;
                     }
 
-                    if (!TryParseExpression(out var argument))
-                        return false;
-
-                    arguments.Add(argument);
-                }
-                
-                if (!TryParseExpression(out var returnType))
-                    return false;
-                
-                if (TryEatToken(TokenKind.Arrow))
-                {
-                    if (!TryParseCodeBlock(out var block))
-                        return false;
-
-                    result = new TypedProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
+                    result = new ProcedureTypeNode(start.Position, start.Kind == TokenKind.KeywordFunction)
                     {
-                        Block = block,
                         Return = returnType,
-                        Arguments = arguments.ConvertAll(i => (Declaration)i)
+                        Arguments = new Node[0]
                     };
                     return true;
                 }
 
-                result = new ProcedureTypeNode(start.Position, start.Kind == TokenKind.KeywordFunction)
+                // If first argument looks like a declarations, then we parse the procedure as a literal
+                if (PeekIs(TokenKind.Identifier) && PeekIs(TokenKind.Colon))
                 {
-                    Arguments = arguments,
-                    Return = returnType
-                };
-                return true;
+                    var arguments = new List<Declaration>();
+
+                    while (!TryEatToken(TokenKind.ParenthesesRight))
+                    {
+                        if (arguments.Count != 0 && !TryEatToken(TokenKind.Comma, out var comma))
+                        {
+                            _compiler.ReportError(comma.Position,
+                                $"Found an unexpected token when parsing a procedure's arguments. Expected {TokenKind.Comma}, but got {comma.Kind}.");
+                            return false;
+                        }
+
+                        if (!TryParseDeclaration(out var argument))
+                            return false;
+
+                        arguments.Add(argument);
+                    }
+
+                    if (!TryParseExpression(out var returnType))
+                        return false;
+
+                    if (TryEatToken(TokenKind.Arrow, out var arrow))
+                    {
+                        if (!TryParseCodeBlock(out var block))
+                            return false;
+
+                        result = new TypedProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
+                        {
+                            Block = block,
+                            Return = returnType,
+                            Arguments = arguments
+                        };
+                        return true;
+                    }
+
+                    // TODO: Error
+                    _compiler.ReportError(arrow.Position, "");
+                    return false;
+                }
+
+                // Else we parse it as a type
+                {
+                    var arguments = new List<Node>();
+
+                    while (!TryEatToken(TokenKind.ParenthesesRight))
+                    {
+                        if (arguments.Count != 0 && !TryEatToken(TokenKind.Comma, out var comma))
+                        {
+                            _compiler.ReportError(comma.Position,
+                                $"Found an unexpected token when parsing a procedure's arguments. Expected {TokenKind.Comma}, but got {comma.Kind}.");
+                            return false;
+                        }
+
+                        if (!TryParseExpression(out var argument))
+                            return false;
+
+                        arguments.Add(argument);
+                    }
+
+                    if (!TryParseExpression(out var returnType))
+                        return false;
+
+                    result = new ProcedureTypeNode(start.Position, start.Kind == TokenKind.KeywordFunction)
+                    {
+                        Arguments = arguments,
+                        Return = returnType
+                    };
+                    return true;
+                }
             }
             
             _compiler.ReportError(start.Position, 

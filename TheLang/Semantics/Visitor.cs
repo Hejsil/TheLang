@@ -20,8 +20,6 @@ namespace TheLang.Semantics
                     return Visit(n);
                 case CompositTypeLiteral n:
                     return Visit(n);
-                case ExpressionBodyProcedure n:
-                    return Visit(n);
                 case FloatLiteral n:
                     return Visit(n);
                 case IntegerLiteral n:
