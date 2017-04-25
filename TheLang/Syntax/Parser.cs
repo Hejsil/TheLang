@@ -95,7 +95,7 @@ namespace TheLang.Syntax
                 if (TryEatToken(TokenKind.KeywordStruct))
                 {
 
-
+                    // TODO: Parse struct
                     return true;
                 }
 
@@ -421,7 +421,7 @@ namespace TheLang.Syntax
                         if (!TryParseCodeBlock(out var block))
                             return false;
 
-                        result = new BlockBodyProcedure(start.Position, start.Kind == TokenKind.KeywordFunction)
+                        result = new ProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
                         {
                             Block = block,
                             Return = returnType,
@@ -430,7 +430,7 @@ namespace TheLang.Syntax
                         return true;
                 }
 
-                result = new ProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
+                result = new ProcedureTypeNode(start.Position, start.Kind == TokenKind.KeywordFunction)
                 {
                     Arguments = arguments,
                     Return = returnType

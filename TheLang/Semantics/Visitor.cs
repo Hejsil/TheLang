@@ -16,7 +16,7 @@ namespace TheLang.Semantics
         {
             switch (node)
             {
-                case BlockBodyProcedure n:
+                case ProcedureLiteral n:
                     return Visit(n);
                 case CompositTypeLiteral n:
                     return Visit(n);
@@ -48,7 +48,7 @@ namespace TheLang.Semantics
                     return Visit(n);
                 case NeedsToBeInfered n:
                     return Visit(n);
-                case ProcedureLiteral n:
+                case ProcedureTypeNode n:
                     return Visit(n);
                 case ProgramNode n:
                     return Visit(n);
@@ -72,7 +72,7 @@ namespace TheLang.Semantics
         protected abstract bool Visit(Symbol node);
         protected abstract bool Visit(CompositTypeLiteral node);
         protected abstract bool Visit(Call node);
-        protected abstract bool Visit(ProcedureLiteral node);
+        protected abstract bool Visit(ProcedureTypeNode node);
 
         protected virtual bool Visit(ProgramNode node) => VisitCollection(node.Files);
         protected virtual bool Visit(FileNode node) => VisitCollection(node.Declarations);

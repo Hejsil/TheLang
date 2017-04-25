@@ -381,7 +381,7 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(ProcedureLiteral node)
+        protected override bool Visit(ProcedureTypeNode node)
         {
             if (!Visit(node.Return))
                 return false;

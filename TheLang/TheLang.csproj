@@ -48,12 +48,11 @@
     <Compile Include=".OBeautifulCode.Recipes\OBeautifulCode.Math\HashCodeHelper.cs" />
     <Compile Include="AST\Bases\BinaryNode.cs" />
     <Compile Include="AST\Expressions\Call.cs" />
-    <Compile Include="AST\Expressions\Literals\BlockBodyProcedure.cs" />
+    <Compile Include="AST\Expressions\Literals\ProcedureLiteral.cs" />
     <Compile Include="AST\Expressions\Literals\CompositTypeLiteral.cs" />
-    <Compile Include="AST\Expressions\Literals\ExpressionBodyProcedure.cs" />
     <Compile Include="AST\Expressions\Literals\FloatLiteral.cs" />
     <Compile Include="AST\Expressions\Literals\IntegerLiteral.cs" />
-    <Compile Include="AST\Expressions\Literals\ProcedureLiteral.cs" />
+    <Compile Include="AST\Expressions\Literals\ProcedureTypeNode.cs" />
     <Compile Include="AST\Expressions\Literals\StringLiteral.cs" />
     <Compile Include="AST\Expressions\Literals\TupleLiteral.cs" />
     <Compile Include="AST\Expressions\Operators\AssociativityKind.cs" />
