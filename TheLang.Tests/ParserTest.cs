@@ -83,20 +83,22 @@ namespace TheLang.Tests
             Assert.NotNull(op);
 
             TestThatChildrenUpholdPriority(op);
+        }
 
-            void TestThatChildrenUpholdPriority(BinaryOperator binary)
+        private void TestThatChildrenUpholdPriority(BinaryOperator binary)
+        {
+            var left = binary.Left as BinaryOperator;
+            var right = binary.Right as BinaryOperator;
+            if (left != null)
             {
-                if (binary.Left is BinaryOperator left)
-                {
-                    Assert.LessOrEqual(left.Priority, binary.Priority, binary.Kind.ToString());
-                    TestThatChildrenUpholdPriority(left);
-                }
+                Assert.LessOrEqual(left.Priority, binary.Priority, binary.Kind.ToString());
+                TestThatChildrenUpholdPriority(left);
+            }
 
-                if (binary.Right is BinaryOperator right)
-                {
-                    Assert.LessOrEqual(right.Priority, binary.Priority, binary.Kind.ToString());
-                    TestThatChildrenUpholdPriority(right);
-                }
+            if (right != null)
+            {
+                Assert.LessOrEqual(right.Priority, binary.Priority, binary.Kind.ToString());
+                TestThatChildrenUpholdPriority(right);
             }
         }
         

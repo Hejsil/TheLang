@@ -6,6 +6,7 @@ using TheLang.AST.Expressions.Literals;
 using TheLang.AST.Expressions.Operators;
 using TheLang.AST.Statments;
 using TheLang.Semantics.TypeChecking.Types;
+using Kind = TheLang.Semantics.TypeChecking.Types.TypeInfo.Kind;
 
 namespace TheLang.Semantics.TypeChecking
 {
@@ -22,7 +23,7 @@ namespace TheLang.Semantics.TypeChecking
 
         protected override bool Visit(StringLiteral node)
         {
-            node.Type = GetTypeInfo(new StringTypeInfo());
+            node.Type = GetTypeInfo(new TypeInfo(Kind.String));
             return true;
         }
 
@@ -30,13 +31,13 @@ namespace TheLang.Semantics.TypeChecking
 
         protected override bool Visit(IntegerLiteral node)
         {
-            node.Type = GetTypeInfo(new IntegerTypeInfo(TypeInfo.NeedToBeInferedSize, true));
+            node.Type = GetTypeInfo(new TypeInfo(Kind.Integer));
             return true;
         }
 
         protected override bool Visit(FloatLiteral node)
         {
-            node.Type = GetTypeInfo(new FloatTypeInfo(TypeInfo.NeedToBeInferedSize));
+            node.Type = GetTypeInfo(new TypeInfo(Kind.Float));
             return true;
         }
 
@@ -45,7 +46,7 @@ namespace TheLang.Semantics.TypeChecking
             if (!Visit(node.Child))
                 return false;
 
-            node.Type = GetTypeInfo(new ArrayTypeInfo(node.Child.Type, node.Dimensions));
+            node.Type = GetTypeInfo(new TypeInfo(Kind.Array, node.Dimensions, node.Child.Type));
             return false;
         }
 
@@ -54,7 +55,7 @@ namespace TheLang.Semantics.TypeChecking
             if (!VisitCollection(node.Items))
                 return false;
 
-            node.Type = GetTypeInfo(new TupleTypeInfo(node.Items.Select(i => i.Type)));
+            node.Type = GetTypeInfo(new TypeInfo(Kind.Tuple, children: node.Items.Select(i => i.Type)));
             return true;
         }
 
@@ -63,14 +64,15 @@ namespace TheLang.Semantics.TypeChecking
             if (!Visit(node.DeclaredType))
                 return false;
 
-            if (!(node.DeclaredType.Type is TypeTypeInfo type))
+            var declaredType = node.DeclaredType.Type;
+            if (declaredType.Id != Kind.Type)
             {
                 _compiler.ReportError(node.DeclaredType.Position, 
                     $"A variable can only be declared a Type, and not {node.DeclaredType.Type}.");
                 return false;
             }
 
-            node.Type = type.Type;
+            node.Type = declaredType;
 
             var peekTable = _symbolTable.Peek();
             if (peekTable.ContainsKey(node.Name))
@@ -91,12 +93,13 @@ namespace TheLang.Semantics.TypeChecking
             if (!Visit(node.Value))
                 return false;
 
+            var declaredType = node.DeclaredType.Type;
             // If declarations type is null, then the type needs to be infered
-            if (node.DeclaredType.Type == null)
+            if (declaredType == null)
             {
                 node.Type = node.Value.Type;
             }
-            else if (!(node.DeclaredType.Type is TypeTypeInfo type))
+            else if (declaredType.Id != Kind.Type)
             {
                 _compiler.ReportError(node.DeclaredType.Position,
                     $"A variable can only be declared a Type, and not {node.DeclaredType.Type}.");
@@ -104,7 +107,6 @@ namespace TheLang.Semantics.TypeChecking
             }
             else
             {
-                var declaredType = type.Type;
                 var valueType = node.Value.Type;
 
                 if (!ExpectType(declaredType, valueType))
@@ -114,15 +116,15 @@ namespace TheLang.Semantics.TypeChecking
                     return false;
                 }
 
-                switch (node.Type)
+                switch (node.Type.Id)
                 {
-                    case IntegerTypeInfo i:
-                        if (i.Size == TypeInfo.NeedToBeInferedSize)
-                            node.Type = GetTypeInfo(new IntegerTypeInfo(TypeInfo.Int64Size, i.IsSigned));
+                    case Kind.Integer:
+                        if (node.Type.Size == TypeInfo.NeedToBeInferedSize)
+                            node.Type = GetTypeInfo(new TypeInfo(Kind.Integer, TypeInfo.Bit64));
                         break;
-                    case FloatTypeInfo f:
-                        if (f.Size == TypeInfo.NeedToBeInferedSize)
-                            node.Type = GetTypeInfo(new FloatTypeInfo(TypeInfo.Int64Size));
+                    case Kind.Float:
+                        if (node.Type.Size == TypeInfo.NeedToBeInferedSize)
+                            node.Type = GetTypeInfo(new TypeInfo(Kind.Float, TypeInfo.Bit64));
                         break;
 
                     default:
@@ -148,21 +150,22 @@ namespace TheLang.Semantics.TypeChecking
             if (!Visit(node.Left))
                 return false;
 
+            var leftType = node.Left.Type;
             if (node.Kind == BinaryOperatorKind.Dot)
             {
                 // The parser should ensure this, so if we crash, the parser made a mistake
                 var name = ((Symbol)node.Right).Name;
 
-                switch (node.Left.Type)
+                switch (leftType.Id)
                 {
-                    case ArrayTypeInfo a:
+                    case Kind.Array:
                         switch (name)
                         {
                             case "length":
-                                node.Type = GetTypeInfo(new IntegerTypeInfo(64, true));
+                                node.Type = GetTypeInfo(new TypeInfo(Kind.Integer, TypeInfo.Bit64));
                                 return true;
                             case "data":
-                                node.Type = GetTypeInfo(new PointerTypeInfo(a.ElementType, PointerKind.Weak));
+                                node.Type = GetTypeInfo(new TypeInfo(Kind.Pointer, children: leftType.Children));
                                 return true;
                             default:
                                 _compiler.ReportError(node.Position,
@@ -170,7 +173,7 @@ namespace TheLang.Semantics.TypeChecking
                                 return false;
                         }
 
-                    case StringTypeInfo s:
+                    case Kind.String:
                         switch (name)
                         {
                             case "length":
@@ -208,7 +211,6 @@ namespace TheLang.Semantics.TypeChecking
             if (!Visit(node.Right))
                 return false;
 
-            var leftType = node.Left.Type;
             var rightType = node.Right.Type;
             switch (node.Kind)
             {

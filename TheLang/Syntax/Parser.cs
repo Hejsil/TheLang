@@ -36,19 +36,19 @@ namespace TheLang.Syntax
         /// </summary>
         /// <param name="result"></param>
         /// <returns></returns>
-        public bool TryParseFile(out FileNode result)
+        public FileNode TryParseFile()
         {
-            result = null;
-
             var declarations = new List<Node>();
             var start = PeekToken();
+            Token peek;
 
-            while (!TryEatToken(TokenKind.EndOfFile, out var peek))
+            while (!TryEatToken(TokenKind.EndOfFile, out peek))
             {
                 if (peek.Kind == TokenKind.Identifier)
                 {
-                    if (!TryParseDeclaration(out var declaration))
-                        return false;
+                    var declaration = TryParseDeclaration();
+                    if (declaration == null)
+                        return null;
 
                     declarations.Add(declaration);
                 }
@@ -57,12 +57,11 @@ namespace TheLang.Syntax
                     _compiler.ReportError(peek.Position, 
                         $"Expected {TokenKind.Identifier}, but got {peek.Kind}.", 
                         "Only declarations can exist in the global scope of a program.");
-                    return false;
+                    return null;
                 }
             }
 
-            result = new FileNode(start.Position) { Declarations = declarations };
-            return true;
+            return new FileNode(start.Position) { Declarations = declarations };
         }
 
         /// <summary>
@@ -75,22 +74,23 @@ namespace TheLang.Syntax
         /// </summary>
         /// <param name="result"></param>
         /// <returns></returns>
-        private bool TryParseDeclaration(out Declaration result)
+        private Declaration TryParseDeclaration()
         {
-            result = null;
+            Token identifier;
+            Token peek;
 
-            if (!TryEatToken(TokenKind.Identifier, out var identifier))
+            if (!TryEatToken(TokenKind.Identifier, out identifier))
             {
                 _compiler.ReportError(identifier.Position,
                     $"Was trying to parse a Declaration and expected an {TokenKind.Identifier}, but got {identifier.Kind}.");
-                return false;
+                return null;
             }
 
-            if (!TryEatToken(TokenKind.Colon, out var colon))
+            if (!TryEatToken(TokenKind.Colon, out peek))
             {
-                _compiler.ReportError(colon.Position,
-                    $"Was trying to parse a Declaration and expected an {TokenKind.Colon}, but got {colon.Kind}.");
-                return false;
+                _compiler.ReportError(peek.Position,
+                    $"Was trying to parse a Declaration and expected an {TokenKind.Colon}, but got {peek.Kind}.");
+                return null;
             }
 
             Node type;
@@ -102,48 +102,33 @@ namespace TheLang.Syntax
                     type = new NeedsToBeInfered(colonOrEqual.Position);
                     break;
                 default:
-                    if (!TryParseExpression(out type))
-                        return false;
+                    type = TryParseExpression();
+                    if (type == null)
+                        return null;
 
                     break;
             }
 
 
-            if (TryEatToken(TokenKind.Colon, out colonOrEqual))
+            if (TryEatToken(TokenKind.Colon, out colonOrEqual) || TryEatToken(TokenKind.Equal, out colonOrEqual))
             {
-                if (!TryParseExpression(out var expression))
-                    return false;
+                var expression = TryParseExpression();
+                if (expression == null)
+                    return null;
 
-                result = new Variable(colonOrEqual.Position, colonOrEqual.Kind == TokenKind.Colon)
+                return new Variable(colonOrEqual.Position, colonOrEqual.Kind == TokenKind.Colon)
                 {
                     DeclaredType = type,
-                    Name = identifier.Value,
+                    Name = peek.Value,
                     Value = expression
                 };
-                return true;
             }
 
-
-            if (TryEatToken(TokenKind.Equal, out colonOrEqual))
-            {
-                if (!TryParseExpression(out var expression))
-                    return false;
-
-                result = new Variable(colonOrEqual.Position, colonOrEqual.Kind == TokenKind.Colon)
-                {
-                    DeclaredType = type,
-                    Name = identifier.Value,
-                    Value = expression
-                };
-                return true;
-            }
-
-            result = new Declaration(identifier.Position)
+            return new Declaration(identifier.Position)
             {
                 DeclaredType = type,
                 Name = identifier.Value
             };
-            return true;
 
         }
 
@@ -155,12 +140,11 @@ namespace TheLang.Syntax
         /// </summary>
         /// <param name="result"></param>
         /// <returns></returns>
-        private bool TryParseExpression(out Node result)
+        private Node TryParseExpression()
         {
-            result = null;
-
-            if (!TryParseUnary(out var top))
-                return false;
+            var top = TryParseUnary();
+            if (top == null)
+                return null;
 
             var peek = PeekToken();
             while (IsBinaryOperator(peek.Kind))
@@ -168,15 +152,17 @@ namespace TheLang.Syntax
                 var op = new BinaryOperator(peek.Position, (BinaryOperatorKind)peek.Kind);
                 EatToken();
 
-                if (!TryParseUnary(out var right))
-                    return false;
+                var right = TryParseUnary();
+                if (right == null)
+                    return null;
 
                 op.Left = top;
                 op.Right = right;
                 top = op;
 
+                var b = op.Left as BinaryOperator;
                 // The loop that ensures that the operators upholds their priority.
-                while (op.Left is BinaryOperator b)
+                while (b != null)
                 {
                     if (b.Priority < op.Priority)
                         break;
@@ -185,20 +171,20 @@ namespace TheLang.Syntax
 
                     op.Left = b.Right;
                     b.Right = op;
+                    b = op.Left as BinaryOperator;
                 }
 
                 if (op.Kind == BinaryOperatorKind.Dot && !(op.Right is Symbol))
                 {
                     _compiler.ReportError(op.Right.Position, 
                         "Only an identifier is allowed on the right side of the dot operator.");
-                    return false;
+                    return null;
                 }
 
                 peek = PeekToken();
             }
 
-            result = top;
-            return true;
+            return top;
         }
 
         /// <summary>
@@ -214,35 +200,22 @@ namespace TheLang.Syntax
         /// </summary>
         /// <param name="result"></param>
         /// <returns></returns>
-        private bool TryParseUnary(out Node result)
+        private Node TryParseUnary()
         {
-            result = null;
+            var unary = TryParseUnaryOperatorOrArrayTypePrefix();
+            var unaryChild = TryParseUnaryOperatorOrArrayTypePrefix();
 
-            if (!TryParseUnaryOperatorOrArrayTypePrefix(out var unary))
-                return false;
-
-            if (unary != null)
+            while (unaryChild != null)
             {
-                result = unary;
-
-                for (;;)
-                {
-                    if (!TryParseUnaryOperatorOrArrayTypePrefix(out var child))
-                        return false;
-
-                    if (child != null)
-                    {
-                        unary.Child = child;
-                        unary = (UnaryNode)unary.Child;
-                        continue;
-                    }
-
-                    break;
-                }
+                unary.Child = unaryChild;
+                unary = (UnaryNode)unary.Child;
+                unaryChild = TryParseUnaryOperatorOrArrayTypePrefix();
             }
 
-            if (!TryParseTerm(out var leaf))
-                return false;
+            var leaf = TryParseTerm();
+
+            if (leaf == null)
+                return null;
             
             for (;;)
             {
@@ -250,19 +223,22 @@ namespace TheLang.Syntax
                 {
                     var assignments = new List<BinaryOperator>();
 
-                    while (TryEatToken(TokenKind.Identifier, out var identifier))
+                    Token peek;
+                    while (TryEatToken(TokenKind.Identifier, out peek))
                     {
-                        var left = new Symbol(identifier.Position, identifier.Value);
+                        var left = new Symbol(peek.Position, peek.Value);
 
-                        if (!TryEatToken(TokenKind.Equal, out var equal))
+                        if (!TryEatToken(TokenKind.Equal, out peek))
                         {
-                            _compiler.ReportError(equal.Position,
-                                $"Can only assign in the curly brackets of an composit type literal. Expected {TokenKind.Equal}, but got {equal.Kind}.");
-                            return false;
+                            _compiler.ReportError(peek.Position,
+                                $"Can only assign in the curly brackets of an composit type literal. Expected {TokenKind.Equal}, but got {peek.Kind}.");
+                            return null;
                         }
 
-                        if (!TryParseExpression(out var right))
-                            return false;
+                        var right = TryParseExpression();
+
+                        if (right == null)
+                            return null;
 
                         assignments.Add(new BinaryOperator(left.Position, BinaryOperatorKind.Assign)
                         {
@@ -274,11 +250,11 @@ namespace TheLang.Syntax
                             break;
                     }
 
-                    if (!TryEatToken(TokenKind.CurlyRight, out var curlyRight))
+                    if (!TryEatToken(TokenKind.CurlyRight, out peek))
                     {
-                        _compiler.ReportError(curlyRight.Position,
-                            $"Did not find the end of the composit type literal. Expected {TokenKind.CurlyRight}, but got {curlyRight.Kind}.");
-                        return false;
+                        _compiler.ReportError(peek.Position,
+                            $"Did not find the end of the composit type literal. Expected {TokenKind.CurlyRight}, but got {peek.Kind}.");
+                        return null;
                     }
 
                     leaf = new CompositTypeLiteral(leaf.Position) { Child = leaf, Values = assignments };
@@ -290,15 +266,17 @@ namespace TheLang.Syntax
                     var arguments = new List<Node>();
                     while (!TryEatToken(TokenKind.ParenthesesRight))
                     {
-                        if (arguments.Count != 0 && !TryEatToken(TokenKind.Comma, out var comma))
+                        Token comma;
+                        if (arguments.Count != 0 && !TryEatToken(TokenKind.Comma, out comma))
                         {
                             _compiler.ReportError(comma.Position,
                                 $"Found an unexpected token when parsing a procedure call's arguments. Expected {TokenKind.Comma}, but got {comma.Kind}.");
-                            return false;
+                            return null;
                         }
 
-                        if (!TryParseExpression(out var argument))
-                            return false;
+                        var argument = TryParseExpression();
+                        if (argument == null)
+                            return null;
 
                         arguments.Add(argument);
                     }
@@ -311,52 +289,45 @@ namespace TheLang.Syntax
                 {
                     // TODO: implement indexing
                     _compiler.ReportError(leaf.Position, "Not Implemented");
-                    return false;
+                    return null;
                 }
 
                 break;
             }
 
             if (unary != null)
-                unary.Child = leaf;
-            else
-                result = leaf;
-
-            return true;
-
-            
-            bool TryParseUnaryOperatorOrArrayTypePrefix(out UnaryNode prefix)
             {
-                prefix = null;
-                var peekToken = PeekToken();
-
-                if (IsUnaryOperator(peekToken.Kind))
-                {
-                    EatToken();
-                    prefix = new UnaryOperator(peekToken.Position, (UnaryOperatorKind)peekToken.Kind);
-                    return true;
-                }
-
-                if (TryEatToken(TokenKind.SquareLeft, out var first))
-                {
-                    var dimensions = 1;
-                    while (TryEatToken(TokenKind.Comma))
-                        dimensions++;
-
-                    if (!TryEatToken(TokenKind.SquareRight, out var last))
-                    {
-                        _compiler.ReportError(last.Position,
-                            $"Could not find the end of the array prefix. Expected {TokenKind.SquareRight}, but got {last.Kind}.");
-                        return false;
-                    }
-
-                    prefix = new ArrayPostfix(first.Position, dimensions);
-                    return true;
-                }
-
-                prefix = null;
-                return true;
+                unary.Child = leaf;
+                return unary;
             }
+
+
+            return leaf;
+        }
+
+        private UnaryNode TryParseUnaryOperatorOrArrayTypePrefix()
+        {
+            var first = PeekToken();
+
+            if (IsUnaryOperator(first.Kind))
+            {
+                EatToken();
+                return new UnaryOperator(first.Position, (UnaryOperatorKind)first.Kind);
+            }
+
+            if (PeekIs(TokenKind.SquareLeft))
+            {
+                var dimensions = 1;
+                while (PeekIs(TokenKind.Comma, dimensions))
+                    dimensions++;
+
+                if (PeekIs(TokenKind.SquareLeft, dimensions))
+                    return new ArrayPostfix(first.Position, dimensions);
+
+                return null;
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -378,91 +349,81 @@ namespace TheLang.Syntax
         /// </summary>
         /// <param name="result"></param>
         /// <returns></returns>
-        private bool TryParseTerm(out Node result)
+        private Node TryParseTerm()
         {
-            result = null;
-
-            if (TryEatToken(TokenKind.Identifier, out var start))
-            {
-                result = new Symbol(start.Position, start.Value);
-                return true;
-            }
+            Token start;
+            if (TryEatToken(TokenKind.Identifier, out start))
+                return new Symbol(start.Position, start.Value);
 
             if (TryEatToken(TokenKind.FloatNumber, out start))
-            {
-                result = new FloatLiteral(start.Position, double.Parse(start.Value));
-                return true;
-            }
+                return new FloatLiteral(start.Position, double.Parse(start.Value));
 
             if (TryEatToken(TokenKind.DecimalNumber, out start))
-            {
-                result = new IntegerLiteral(start.Position, int.Parse(start.Value));
-                return true;
-            }
+                return new IntegerLiteral(start.Position, int.Parse(start.Value));
             
             if (TryEatToken(TokenKind.String, out start))
-            {
-                result = new StringLiteral(start.Position, start.Value);
-                return true;
-            }
+                return new StringLiteral(start.Position, start.Value);
 
             if (TryEatToken(TokenKind.ParenthesesLeft, out start))
             {
-                if (!TryParseExpression(out result))
-                    return false;
+                var expression = TryParseExpression();
+                if (expression == null)
+                    return null;
 
-                if (TryEatToken(TokenKind.ParenthesesRight, out var parRight))
-                    return true;
+                Token parRight;
+                if (TryEatToken(TokenKind.ParenthesesRight, out parRight))
+                    return expression;
 
                 _compiler.ReportError(parRight.Position,
                     $"Could not find a pair for the left parentheses at {start.Position.Line}:{start.Position.Column}. Expected {TokenKind.ParenthesesRight}, but got {parRight.Kind}.");
-                return false;
+                return null;
             }
             
             if (TryEatToken(TokenKind.KeywordStruct))
             {
                 // TODO: implement indexing
                 _compiler.ReportError(start.Position, "Not Implemented");
-                return false;
+                return null;
             }
 
             // TODO: This does not parse correctly
             if (TryEatToken(TokenKind.KeywordFunction, out start) || TryEatToken(TokenKind.KeywordProcedure, out start))
             {
-                if (!TryEatToken(TokenKind.ParenthesesLeft, out var parLeft))
+                Token peek;
+                if (!TryEatToken(TokenKind.ParenthesesLeft, out peek))
                 {
-                    _compiler.ReportError(parLeft.Position,
-                        $"Could not find the start parentheses at the start of a procedure's argument. Expected {TokenKind.ParenthesesLeft}, but got {parLeft.Kind}.");
-                    return false;
+                    _compiler.ReportError(peek.Position,
+                        $"Could not find the start parentheses at the start of a procedure's argument. Expected {TokenKind.ParenthesesLeft}, but got {peek.Kind}.");
+                    return null;
                 }
 
                 // We can't determin from the arguments whether we are a procedure type or literal, if we have no arguments.
                 // We therefore have to handle the empty procedure differently
                 if (TryEatToken(TokenKind.ParenthesesRight))
                 {
-                    if (!TryParseExpression(out var returnType))
-                        return false;
-                    
-                    if (TryEatToken(TokenKind.Arrow, out var arrow))
-                    {
-                        if (!TryParseCodeBlock(out var block))
-                            return false;
+                    var returnType = TryParseExpression();
+                    if (returnType == null)
+                        return null;
 
-                        result = new TypedProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
+                    if (TryEatToken(TokenKind.Arrow))
+                    {
+                        var block = TryParseCodeBlock();
+                        if (block == null)
+                            return null;
+
+                        return new TypedProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
                         {
                             Block = block,
                             Return = returnType,
                             Arguments = new Declaration[0]
                         };
-                        return true;
                     }
 
-                    result = new ProcedureTypeNode(start.Position, start.Kind == TokenKind.KeywordFunction)
+                    return new ProcedureTypeNode(start.Position, start.Kind == TokenKind.KeywordFunction)
                     {
                         Return = returnType,
                         Arguments = new Node[0]
                     };
-                    return true;
                 }
 
                 // If first argument looks like a declarations, then we parse the procedure as a literal
@@ -472,39 +433,43 @@ namespace TheLang.Syntax
 
                     while (!TryEatToken(TokenKind.ParenthesesRight))
                     {
-                        if (arguments.Count != 0 && !TryEatToken(TokenKind.Comma, out var comma))
+                        Token comma;
+                        if (arguments.Count != 0 && !TryEatToken(TokenKind.Comma, out comma))
                         {
                             _compiler.ReportError(comma.Position,
                                 $"Found an unexpected token when parsing a procedure's arguments. Expected {TokenKind.Comma}, but got {comma.Kind}.");
-                            return false;
+                            return null;
                         }
 
-                        if (!TryParseDeclaration(out var argument))
-                            return false;
+                        var declaration = TryParseDeclaration();
+                        if (declaration == null)
+                            return null;
 
-                        arguments.Add(argument);
+                        arguments.Add(declaration);
                     }
 
-                    if (!TryParseExpression(out var returnType))
-                        return false;
+                    var returnType = TryParseExpression();
+                    if (returnType == null)
+                        return null;
 
-                    if (TryEatToken(TokenKind.Arrow, out var arrow))
+                    Token arrow;
+                    if (TryEatToken(TokenKind.Arrow, out arrow))
                     {
-                        if (!TryParseCodeBlock(out var block))
-                            return false;
+                        var block = TryParseCodeBlock();
+                        if (block == null)
+                            return null;
 
-                        result = new TypedProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
+                        return new TypedProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
                         {
                             Block = block,
                             Return = returnType,
                             Arguments = arguments
                         };
-                        return true;
                     }
 
                     // TODO: Error
                     _compiler.ReportError(arrow.Position, "");
-                    return false;
+                    return null;
                 }
 
                 // Else we parse it as a type
@@ -513,34 +478,36 @@ namespace TheLang.Syntax
 
                     while (!TryEatToken(TokenKind.ParenthesesRight))
                     {
-                        if (arguments.Count != 0 && !TryEatToken(TokenKind.Comma, out var comma))
+                        Token comma;
+                        if (arguments.Count != 0 && !TryEatToken(TokenKind.Comma, out comma))
                         {
                             _compiler.ReportError(comma.Position,
                                 $"Found an unexpected token when parsing a procedure's arguments. Expected {TokenKind.Comma}, but got {comma.Kind}.");
-                            return false;
+                            return null;
                         }
 
-                        if (!TryParseExpression(out var argument))
-                            return false;
+                        var argument = TryParseExpression();
+                        if (argument == null)
+                            return null;
 
                         arguments.Add(argument);
                     }
 
-                    if (!TryParseExpression(out var returnType))
-                        return false;
+                    var returnType = TryParseExpression();
+                    if (returnType == null)
+                        return null;
 
-                    result = new ProcedureTypeNode(start.Position, start.Kind == TokenKind.KeywordFunction)
+                    return new ProcedureTypeNode(start.Position, start.Kind == TokenKind.KeywordFunction)
                     {
                         Arguments = arguments,
                         Return = returnType
                     };
-                    return true;
                 }
             }
             
             _compiler.ReportError(start.Position, 
                 $"While parsing a term, the parser found an unexpected token: {start.Kind}");
-            return false;
+            return null;
         }
 
         /// <summary>
@@ -548,15 +515,14 @@ namespace TheLang.Syntax
         /// </summary>
         /// <param name="result"></param>
         /// <returns></returns>
-        private bool TryParseCodeBlock(out CodeBlock result)
+        private CodeBlock TryParseCodeBlock()
         {
-            result = null;
-
-            if (!TryEatToken(TokenKind.CurlyLeft, out var curlyLeft))
+            Token curlyLeft;
+            if (!TryEatToken(TokenKind.CurlyLeft, out curlyLeft))
             {
                 _compiler.ReportError(curlyLeft.Position,
                     $"Did not find the start of a code block. Expected {TokenKind.CurlyLeft}, but got {curlyLeft.Kind}");
-                return false;
+                return null;
             }
 
             var statements = new List<Node>();
@@ -565,22 +531,23 @@ namespace TheLang.Syntax
             {
                 if (PeekIs(TokenKind.Identifier) && PeekIs(TokenKind.Colon, 1))
                 {
-                    if (!TryParseDeclaration(out var declaration))
-                        return false;
+                    var declaration = TryParseDeclaration();
+                    if (declaration == null)
+                        return null;
 
                     statements.Add(declaration);
                 }
                 else
                 {
-                    if (!TryParseExpression(out var expression))
-                        return false;
+                    var expression = TryParseExpression();
+                    if (expression == null)
+                        return null;
 
                     statements.Add(expression);
                 }
             }
 
-            result = new CodeBlock(curlyLeft.Position) { Statements = statements };
-            return true;
+            return new CodeBlock(curlyLeft.Position) { Statements = statements };
         }
         
         private bool PeekIs(TokenKind expectedKind, int offset = 0) => PeekToken(offset).Kind == expectedKind;
@@ -608,14 +575,18 @@ namespace TheLang.Syntax
         /// </summary>
         /// <param name="expectedKind"></param>
         /// <returns></returns>
-        private bool TryEatToken(TokenKind expectedKind) => TryEatToken(expectedKind, out var _);
+        private bool TryEatToken(TokenKind expectedKind)
+        {
+            Token peek;
+            return TryEatToken(expectedKind, out peek);
+        }
 
         private static readonly HashSet<BinaryOperatorKind> BinaryOperators = 
             new HashSet<BinaryOperatorKind>((BinaryOperatorKind[])Enum.GetValues(typeof(BinaryOperatorKind)));
-        private bool IsBinaryOperator(TokenKind kind) => BinaryOperators.Contains((BinaryOperatorKind)kind);
+        private static bool IsBinaryOperator(TokenKind kind) => BinaryOperators.Contains((BinaryOperatorKind)kind);
         
         private static readonly HashSet<UnaryOperatorKind> UnaryOperators =
             new HashSet<UnaryOperatorKind>((UnaryOperatorKind[])Enum.GetValues(typeof(UnaryOperatorKind)));
-        private bool IsUnaryOperator(TokenKind kind) => UnaryOperators.Contains((UnaryOperatorKind)kind);
+        private static bool IsUnaryOperator(TokenKind kind) => UnaryOperators.Contains((UnaryOperatorKind)kind);
     }
 }

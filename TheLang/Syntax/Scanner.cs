@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.Serialization.Formatters;
-using System.Text;
 
 namespace TheLang.Syntax
 {
@@ -78,7 +76,9 @@ namespace TheLang.Syntax
                 while (EatChar(c => char.IsLetterOrDigit(c) || c == '_')) { }
 
                 var resultStr = GetValue(startIndex);
-                if (_keywords.TryGetValue(resultStr, out var kind))
+
+                TokenKind kind;
+                if (_keywords.TryGetValue(resultStr, out kind))
                     return new Token(kind, resultStr, position);
 
                 return new Token(TokenKind.Identifier, resultStr, position);
