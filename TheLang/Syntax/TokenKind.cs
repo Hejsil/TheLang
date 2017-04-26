@@ -7,7 +7,6 @@ namespace TheLang.Syntax
         // Unary operators
         ExclamationMark = UnaryOperatorKind.Not,
         At = UnaryOperatorKind.Reference,
-        SAt = UnaryOperatorKind.SharedReference,
         UAt = UnaryOperatorKind.UniqueReference,
         Tilde = UnaryOperatorKind.Dereference,
 

@@ -6,7 +6,6 @@
         Positive = BinaryOperatorKind.Minus,
         Not,
         Reference,
-        SharedReference,
         UniqueReference,
         Dereference
     }

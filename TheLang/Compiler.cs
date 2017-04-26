@@ -2,9 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using TheLang.AST;
-using TheLang.AST.Bases;
 using TheLang.Semantics.TypeChecking;
-using TheLang.Semantics.TypeChecking.Types;
 using TheLang.Syntax;
 
 namespace TheLang
@@ -53,7 +51,7 @@ namespace TheLang
         
         public void AddFileToProject(string fileName)
         {
-            if (!_filesInProject.Add(fileName))
+            if (_filesInProject.Add(fileName))
                 _filesToCompile.Enqueue(fileName);
         }
 
@@ -72,7 +70,7 @@ namespace TheLang
 
         private bool ParserLoop(ICollection<FileNode> result)
         {
-            while (_filesInProject.Count != 0)
+            while (_filesToCompile.Count != 0)
             {
                 var parser = new Parser(_filesToCompile.Dequeue(), this);
 

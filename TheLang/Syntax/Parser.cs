@@ -327,6 +327,7 @@ namespace TheLang.Syntax
             
             bool TryParseUnaryOperatorOrArrayTypePrefix(out UnaryNode prefix)
             {
+                prefix = null;
                 var peekToken = PeekToken();
 
                 if (IsUnaryOperator(peekToken.Kind))
@@ -342,10 +343,8 @@ namespace TheLang.Syntax
                     while (TryEatToken(TokenKind.Comma))
                         dimensions++;
 
-                    if (TryEatToken(TokenKind.SquareRight, out var last))
+                    if (!TryEatToken(TokenKind.SquareRight, out var last))
                     {
-                        prefix = null;
-
                         _compiler.ReportError(last.Position,
                             $"Could not find the end of the array prefix. Expected {TokenKind.SquareRight}, but got {last.Kind}.");
                         return false;
@@ -467,7 +466,7 @@ namespace TheLang.Syntax
                 }
 
                 // If first argument looks like a declarations, then we parse the procedure as a literal
-                if (PeekIs(TokenKind.Identifier) && PeekIs(TokenKind.Colon))
+                if (PeekIs(TokenKind.Identifier) && PeekIs(TokenKind.Colon, 1))
                 {
                     var arguments = new List<Declaration>();
 
@@ -599,7 +598,8 @@ namespace TheLang.Syntax
             if (result.Kind != expectedKind)
                 return false;
 
-            Debug.Assert(EatToken().Kind == result.Kind);
+            var eaten = EatToken();
+            Debug.Assert(eaten.Kind == result.Kind);
             return true;
         }
 

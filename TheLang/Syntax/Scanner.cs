@@ -67,18 +67,10 @@ namespace TheLang.Syntax
             var position = new Position(_fileName, _line, _column);
             var startIndex = _index;
 
-            if (PeekIs('@', 1))
+            if (PeekIs('@', 1) && EatChar('u'))
             {
-                if (EatChar('u'))
-                {
-                    Debug.Assert(EatChar('@'));
-                    return new Token(TokenKind.UAt, GetValue(startIndex), position);
-                }
-                if (EatChar('s'))
-                {
-                    Debug.Assert(EatChar('@'));
-                    return new Token(TokenKind.SAt, GetValue(startIndex), position);
-                }
+                Debug.Assert(EatChar('@'));
+                return new Token(TokenKind.UAt, GetValue(startIndex), position);
             }
 
             if (EatChar(c => char.IsLetter(c) || c == '_') )
