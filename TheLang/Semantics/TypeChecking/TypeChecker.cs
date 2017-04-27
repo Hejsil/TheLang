@@ -1,19 +1,21 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using TheLang.AST.Expressions;
 using TheLang.AST.Expressions.Literals;
 using TheLang.AST.Expressions.Operators;
 using TheLang.AST.Statments;
-using TheLang.Semantics.TypeChecking.Types;
-using Kind = TheLang.Semantics.TypeChecking.Types.TypeInfo.Kind;
 
 namespace TheLang.Semantics.TypeChecking
 {
     public class TypeChecker : Visitor
     {
-        private readonly Dictionary<TypeInfo, TypeInfo> _existingTypes = new Dictionary<TypeInfo, TypeInfo>();
-        private readonly Stack<Dictionary<string, TypeInfo>> _symbolTable = new Stack<Dictionary<string, TypeInfo>>();
+        private readonly Dictionary<TypeInfoStruct, TypeInfo> _existingTypes =
+            new Dictionary<TypeInfoStruct, TypeInfo>(TypeInfoStruct.Comparer);
+
+        private readonly Stack<Dictionary<string, TypeInfo>> _symbolTable =
+            new Stack<Dictionary<string, TypeInfo>>();
         private readonly Compiler _compiler;
 
         public TypeChecker(Compiler compiler)
@@ -23,7 +25,12 @@ namespace TheLang.Semantics.TypeChecking
 
         protected override bool Visit(StringLiteral node)
         {
-            node.Type = GetTypeInfo(new TypeInfo(Kind.String));
+            var chr = GetTypeInfo(new TypeInfoStruct(TypeId.UInteger, TypeInfo.Bit8));
+            var pointer = GetTypeInfo(new TypeInfoStruct(TypeId.Pointer, chr));
+            var integer = GetTypeInfo(new TypeInfoStruct(TypeId.Integer, TypeInfo.Bit64));
+            var dataField = GetTypeInfo(new TypeInfoStruct(TypeId.Field, "data", pointer));
+            var lengthField = GetTypeInfo(new TypeInfoStruct(TypeId.Field, "length", integer));
+            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.String, dataField, lengthField));
             return true;
         }
 
@@ -31,13 +38,13 @@ namespace TheLang.Semantics.TypeChecking
 
         protected override bool Visit(IntegerLiteral node)
         {
-            node.Type = GetTypeInfo(new TypeInfo(Kind.Integer));
+            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Integer));
             return true;
         }
 
         protected override bool Visit(FloatLiteral node)
         {
-            node.Type = GetTypeInfo(new TypeInfo(Kind.Float));
+            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Float));
             return true;
         }
 
@@ -46,8 +53,12 @@ namespace TheLang.Semantics.TypeChecking
             if (!Visit(node.Child))
                 return false;
 
-            node.Type = GetTypeInfo(new TypeInfo(Kind.Array, node.Dimensions, node.Child.Type));
-            return false;
+            var pointer = GetTypeInfo(new TypeInfoStruct(TypeId.Pointer, node.Child.Type));
+            var integer = GetTypeInfo(new TypeInfoStruct(TypeId.Integer, TypeInfo.Bit64));
+            var dataField = GetTypeInfo(new TypeInfoStruct(TypeId.Field, "data", pointer));
+            var lengthField = GetTypeInfo(new TypeInfoStruct(TypeId.Field, "length", integer));
+            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Array, node.Dimensions, dataField, lengthField));
+            return true;
         }
 
         protected override bool Visit(TupleLiteral node)
@@ -55,7 +66,7 @@ namespace TheLang.Semantics.TypeChecking
             if (!VisitCollection(node.Items))
                 return false;
 
-            node.Type = GetTypeInfo(new TypeInfo(Kind.Tuple, children: node.Items.Select(i => i.Type)));
+            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Tuple, children: node.Items.Select(i => i.Type)));
             return true;
         }
 
@@ -65,7 +76,7 @@ namespace TheLang.Semantics.TypeChecking
                 return false;
 
             var declaredType = node.DeclaredType.Type;
-            if (declaredType.Id != Kind.Type)
+            if (declaredType.Id != TypeId.Type)
             {
                 _compiler.ReportError(node.DeclaredType.Position, 
                     $"A variable can only be declared a Type, and not {node.DeclaredType.Type}.");
@@ -99,7 +110,7 @@ namespace TheLang.Semantics.TypeChecking
             {
                 node.Type = node.Value.Type;
             }
-            else if (declaredType.Id != Kind.Type)
+            else if (declaredType.Id != TypeId.Type)
             {
                 _compiler.ReportError(node.DeclaredType.Position,
                     $"A variable can only be declared a Type, and not {node.DeclaredType.Type}.");
@@ -109,7 +120,7 @@ namespace TheLang.Semantics.TypeChecking
             {
                 var valueType = node.Value.Type;
 
-                if (!ExpectType(declaredType, valueType))
+                if (!valueType.IsImplicitlyConvertibleTo(declaredType))
                 {
                     _compiler.ReportError(node.Position, 
                         $"{valueType} is not assignable to {declaredType}.");
@@ -118,13 +129,11 @@ namespace TheLang.Semantics.TypeChecking
 
                 switch (node.Type.Id)
                 {
-                    case Kind.Integer:
+                    case TypeId.UInteger:
+                    case TypeId.Integer:
+                    case TypeId.Float:
                         if (node.Type.Size == TypeInfo.NeedToBeInferedSize)
-                            node.Type = GetTypeInfo(new TypeInfo(Kind.Integer, TypeInfo.Bit64));
-                        break;
-                    case Kind.Float:
-                        if (node.Type.Size == TypeInfo.NeedToBeInferedSize)
-                            node.Type = GetTypeInfo(new TypeInfo(Kind.Float, TypeInfo.Bit64));
+                            node.Type = GetTypeInfo(new TypeInfoStruct(node.Type.Id, TypeInfo.Bit64));
                         break;
 
                     default:
@@ -158,47 +167,19 @@ namespace TheLang.Semantics.TypeChecking
 
                 switch (leftType.Id)
                 {
-                    case Kind.Array:
-                        switch (name)
-                        {
-                            case "length":
-                                node.Type = GetTypeInfo(new TypeInfo(Kind.Integer, TypeInfo.Bit64));
-                                return true;
-                            case "data":
-                                node.Type = GetTypeInfo(new TypeInfo(Kind.Pointer, children: leftType.Children));
-                                return true;
-                            default:
-                                _compiler.ReportError(node.Position,
-                                    $"Array does not contain field \"{name}\"");
-                                return false;
-                        }
-
-                    case Kind.String:
-                        switch (name)
-                        {
-                            case "length":
-                                node.Type = GetTypeInfo(new IntegerTypeInfo(64, true));
-                                return true;
-                            case "data":
-                                node.Type = GetTypeInfo(new PointerTypeInfo(GetTypeInfo(new IntegerTypeInfo(8, false)), PointerKind.Weak));
-                                return true;
-                            default:
-                                _compiler.ReportError(node.Position,
-                                    $"String does not contain field \"{name}\"");
-                                return false;
-                        }
-
-                    case CompositTypeInfo c:
-                        var field = c.Fields.FirstOrDefault(f => f.Name == name);
+                    case TypeId.Array:
+                    case TypeId.String:
+                    case TypeId.Composit:
+                        var field = leftType.Children.FirstOrDefault(f => f.Id == TypeId.Field && f.Name == name);
 
                         if (field == null)
                         {
                             _compiler.ReportError(node.Position,
-                                $"{c} does not contain the field \"{name}\"");
+                                $"{leftType} does not contain the field \"{name}\"");
                             return false;
                         }
 
-                        node.Type = field.Type;
+                        node.Type = field.Children.First();
                         return true;
 
                     default:
@@ -207,6 +188,7 @@ namespace TheLang.Semantics.TypeChecking
                         return false;
                 }
             }
+
 
             if (!Visit(node.Right))
                 return false;
@@ -218,7 +200,6 @@ namespace TheLang.Semantics.TypeChecking
                     _compiler.ReportError(node.Position,
                         $"To be implemented");
                     return false;
-
 
                 case BinaryOperatorKind.PlusAssign:
                 case BinaryOperatorKind.MinusAssign:
@@ -232,7 +213,7 @@ namespace TheLang.Semantics.TypeChecking
                         return false;
                     }
 
-                    if (!ExpectType(leftType, rightType))
+                    if (!rightType.IsImplicitlyConvertibleTo(leftType))
                     {
                         _compiler.ReportError(node.Position,
                             $"{rightType} is not operator assignable to {leftType}.");
@@ -252,56 +233,64 @@ namespace TheLang.Semantics.TypeChecking
                 case BinaryOperatorKind.LessThanEqual:
                 case BinaryOperatorKind.GreaterThan:
                 case BinaryOperatorKind.GreaterThanEqual:
-                    if (!AreTypeCompatible(leftType, rightType))
+                    if (leftType.IsImplicitlyConvertibleTo(rightType))
+                        node.Type = rightType;
+                    else if (rightType.IsImplicitlyConvertibleTo(leftType))
+                        node.Type = leftType;
+                    else
                     {
                         _compiler.ReportError(node.Position,
-                            $"Left side of {node.Kind} is not an Int or Float.");
+                            $"Cannot apply {node.Kind} to {leftType} and {rightType}.");
                         return false;
                     }
 
-                    if (!(leftType is IntegerTypeInfo) && !(leftType is FloatTypeInfo))
+                    switch (node.Type.Id)
                     {
-                        _compiler.ReportError(node.Position,
-                            $"Cannot perform this operator on type {leftType}.");
-                        return false;
-                    }
+                        case TypeId.Integer:
+                        case TypeId.UInteger:
+                        case TypeId.Float:
+                            return true;
 
-                    node.Type = leftType.Size > rightType.Size ? leftType : rightType;
-                    return true;
-
-                case BinaryOperatorKind.Equal:
-                case BinaryOperatorKind.NotEqual:
-                {
-                    if (!AreTypeCompatible(leftType, rightType))
-                    {
-                        _compiler.ReportError(node.Position, 
-                            $"{leftType} is not equallity compareable to {rightType}.");
+                        default:
+                            _compiler.ReportError(node.Position,
+                                $"Cannot apply {node.Kind} to {leftType} and {rightType}.");
                             return false;
                     }
 
-                    node.Type = leftType.Size > rightType.Size ? leftType : rightType;
+                case BinaryOperatorKind.Equal:
+                case BinaryOperatorKind.NotEqual:
+                    if (rightType.IsImplicitlyConvertibleTo(leftType))
+                        node.Type = rightType;
+                    else if (rightType.IsImplicitlyConvertibleTo(leftType))
+                        node.Type = leftType;
+                    else
+                    {
+                        _compiler.ReportError(node.Position,
+                            $"Cannot apply {node.Kind} to {leftType} and {rightType}.");
+                        return false;
+                    }
+
                     return true;
-                }
 
                 case BinaryOperatorKind.And:
                 case BinaryOperatorKind.Or:
-
-                    if (!(leftType is BooleanTypeInfo))
+                    if (rightType.IsImplicitlyConvertibleTo(leftType))
+                        node.Type = rightType;
+                    else if (rightType.IsImplicitlyConvertibleTo(leftType))
+                        node.Type = leftType;
+                    else
                     {
-                        _compiler.ReportError(node.Left.Position,
-                            $"{leftType} is not of type Bool, and can therefore not be used in a boolean expression.");
+                        _compiler.ReportError(node.Position,
+                            $"Cannot apply {node.Kind} to {leftType} and {rightType}.");
                         return false;
                     }
 
-                    if (!(rightType is BooleanTypeInfo))
-                    {
-                        _compiler.ReportError(node.Right.Position,
-                            $"{rightType} is not of type Bool, and can therefore not be used in a boolean expression.");
-                        return false;
-                    }
-                    
-                    node.Type = leftType.Size > rightType.Size ? leftType : rightType;
-                    return true;
+                    if (node.Type.Id == TypeId.Bool)
+                        return true;
+
+                    _compiler.ReportError(node.Position,
+                        $"Cannot apply boolean operator to {leftType} and {rightType}.");
+                    return false;
 
                 case BinaryOperatorKind.Assign:
                 {
@@ -310,16 +299,17 @@ namespace TheLang.Semantics.TypeChecking
                         _compiler.ReportError(node.Left.Position, "Left side of assignment is not assignable.");
                         return false;
                     }
-                    
-                    if (!ExpectType(leftType, rightType))
+
+                    if (rightType.IsImplicitlyConvertibleTo(leftType))
                     {
-                        _compiler.ReportError(node.Position, 
-                            $"{rightType} is not assignable to {leftType}.");
-                            return false;
+                        node.Type = leftType;
+                        return true;
                     }
 
-                    node.Type = leftType;
-                    return true;
+                    _compiler.ReportError(node.Position,
+                        $"{rightType} is not assignable to {leftType}.");
+                        return false;
+
                 }
 
                 default:
@@ -357,72 +347,61 @@ namespace TheLang.Semantics.TypeChecking
             if (!VisitCollection(node.Arguments))
                 return false;
 
-            if (!(node.Child.Type is ProcedureTypeInfo procTypeInfo))
+            var childType = node.Child.Type;
+            if (childType.Id != TypeId.Procedure && childType.Id != TypeId.Function)
             {
                 _compiler.ReportError(node.Position, $"Cannot call {node.Type}.");
                 return false;
             }
-            
-            var zip = node.Arguments.Zip(procTypeInfo.ArgumentTypes, (n, t) => (n, t));
+
+            var actualArgCount = node.Arguments.Count();
+            var expectedArgCount = childType.Children.Count() - 1;
+            if (actualArgCount != expectedArgCount)
+            {
+                _compiler.ReportError(node.Position,
+                    $"Procedure takes {expectedArgCount} arguments, but was provide {actualArgCount}.");
+                return false;
+            }
+
+            var zip = node.Arguments.Zip(childType.Children, (n, t) => (n, t));
 
             var index = 1;
             foreach (var (argument, expectedType) in zip)
             {
                 var actualType = argument.Type;
 
-                if (!ExpectType(expectedType, actualType))
+                if (!actualType.IsImplicitlyConvertibleTo(expectedType))
                 {
                     _compiler.ReportError(argument.Position, $"Argument {index} was cannot be passed to procedure. Expected {expectedType}, but got {actualType}.");
                     return false;
                 }
 
+                Debug.Assert(actualArgCount >= index);
                 index++;
             }
 
-            node.Type = procTypeInfo.ReturnType;
+            node.Type = childType.Children.Last();
             return true;
         }
 
         protected override bool Visit(ProcedureTypeNode node)
         {
-            if (!Visit(node.Return))
-                return false;
             if (!VisitCollection(node.Arguments))
                 return false;
 
-            node.Type = new ProcedureTypeInfo(node.IsFunction, node.Return.Type, node.Arguments.Select(n => n.Type));
+            var kind = node.IsFunction ? TypeId.Function : TypeId.Procedure;
+            node.Type = GetTypeInfo(new TypeInfoStruct(kind, children: node.Arguments.Select(n => n.Type)));
             return true;
         }
 
-        private static bool AreTypeCompatible(TypeInfo type1, TypeInfo type2)
-        {
-            if (type1 is FloatTypeInfo && type2 is FloatTypeInfo)
-                return true;
-
-            if (type1 is IntegerTypeInfo itype1 && type2 is IntegerTypeInfo itype2)
-                return itype1.IsSigned == itype2.IsSigned;
-
-            return type1.Equals(type2);
-        }
-
-        private static bool ExpectType(TypeInfo expected, TypeInfo actual)
-        {
-            if (expected is FloatTypeInfo && actual is FloatTypeInfo)
-                return expected.Size >= actual.Size;
-
-            if (expected is IntegerTypeInfo itype1 && actual is IntegerTypeInfo itype2)
-                return itype1.IsSigned == itype2.IsSigned && expected.Size >= actual.Size;
-
-            return expected.Equals(actual);
-        }
-
-        private TypeInfo GetTypeInfo(TypeInfo typeInfo)
+        private TypeInfo GetTypeInfo(TypeInfoStruct typeInfo)
         {
             if (_existingTypes.TryGetValue(typeInfo, out var result))
                 return result;
 
-            _existingTypes.Add(typeInfo, typeInfo);
-            return typeInfo;
+            var instance = typeInfo.Allocate();
+            _existingTypes.Add(typeInfo, instance);
+            return instance;
         }
 
         private bool TryFindSymbolTypeInfo(string name, out TypeInfo result)

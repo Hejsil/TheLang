@@ -1,4 +1,4 @@
-﻿using TheLang.Semantics.TypeChecking.Types;
+﻿using TheLang.Semantics.TypeChecking;
 using TheLang.Syntax;
 
 namespace TheLang.AST.Bases

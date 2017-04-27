@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using TheLang.AST;
 using TheLang.AST.Bases;
 using TheLang.AST.Expressions;
@@ -34,9 +35,8 @@ namespace TheLang.Syntax
         ///   File -> Declaration*
         ///   
         /// </summary>
-        /// <param name="result"></param>
         /// <returns></returns>
-        public FileNode TryParseFile()
+        public FileNode ParseFile()
         {
             var declarations = new List<Node>();
             var start = PeekToken();
@@ -46,7 +46,7 @@ namespace TheLang.Syntax
             {
                 if (peek.Kind == TokenKind.Identifier)
                 {
-                    var declaration = TryParseDeclaration();
+                    var declaration = ParseDeclaration();
                     if (declaration == null)
                         return null;
 
@@ -72,9 +72,8 @@ namespace TheLang.Syntax
         ///                | Identifier ":" Expression? ( ":" | "=" ) Expression
         /// 
         /// </summary>
-        /// <param name="result"></param>
         /// <returns></returns>
-        private Declaration TryParseDeclaration()
+        private Declaration ParseDeclaration()
         {
             Token identifier;
             Token peek;
@@ -102,7 +101,7 @@ namespace TheLang.Syntax
                     type = new NeedsToBeInfered(colonOrEqual.Position);
                     break;
                 default:
-                    type = TryParseExpression();
+                    type = ParseExpression();
                     if (type == null)
                         return null;
 
@@ -112,7 +111,7 @@ namespace TheLang.Syntax
 
             if (TryEatToken(TokenKind.Colon, out colonOrEqual) || TryEatToken(TokenKind.Equal, out colonOrEqual))
             {
-                var expression = TryParseExpression();
+                var expression = ParseExpression();
                 if (expression == null)
                     return null;
 
@@ -138,11 +137,10 @@ namespace TheLang.Syntax
         ///   Expression -> Unary BinaryOperator Unary
         ///
         /// </summary>
-        /// <param name="result"></param>
         /// <returns></returns>
-        private Node TryParseExpression()
+        private Node ParseExpression()
         {
-            var top = TryParseUnary();
+            var top = ParseUnary();
             if (top == null)
                 return null;
 
@@ -152,7 +150,7 @@ namespace TheLang.Syntax
                 var op = new BinaryOperator(peek.Position, (BinaryOperatorKind)peek.Kind);
                 EatToken();
 
-                var right = TryParseUnary();
+                var right = ParseUnary();
                 if (right == null)
                     return null;
 
@@ -198,9 +196,8 @@ namespace TheLang.Syntax
         ///   Indexing -> "[" Expression "]"
         ///   
         /// </summary>
-        /// <param name="result"></param>
         /// <returns></returns>
-        private Node TryParseUnary()
+        private Node ParseUnary()
         {
             var unary = TryParseUnaryOperatorOrArrayTypePrefix();
             var unaryChild = TryParseUnaryOperatorOrArrayTypePrefix();
@@ -212,7 +209,7 @@ namespace TheLang.Syntax
                 unaryChild = TryParseUnaryOperatorOrArrayTypePrefix();
             }
 
-            var leaf = TryParseTerm();
+            var leaf = ParseTerm();
 
             if (leaf == null)
                 return null;
@@ -235,7 +232,7 @@ namespace TheLang.Syntax
                             return null;
                         }
 
-                        var right = TryParseExpression();
+                        var right = ParseExpression();
 
                         if (right == null)
                             return null;
@@ -274,7 +271,7 @@ namespace TheLang.Syntax
                             return null;
                         }
 
-                        var argument = TryParseExpression();
+                        var argument = ParseExpression();
                         if (argument == null)
                             return null;
 
@@ -321,8 +318,14 @@ namespace TheLang.Syntax
                 while (PeekIs(TokenKind.Comma, dimensions))
                     dimensions++;
 
-                if (PeekIs(TokenKind.SquareLeft, dimensions))
+                if (PeekIs(TokenKind.SquareRight, dimensions))
+                {
+                    TryEatToken(TokenKind.SquareLeft);
+                    while (TryEatToken(TokenKind.Comma)) { }
+                    TryEatToken(TokenKind.SquareRight);
+
                     return new ArrayPostfix(first.Position, dimensions);
+                }
 
                 return null;
             }
@@ -347,9 +350,8 @@ namespace TheLang.Syntax
         ///                     | "(" ( Identifier ( "," Identifier )* )? ")" "=>" CodeBlock
         /// 
         /// </summary>
-        /// <param name="result"></param>
         /// <returns></returns>
-        private Node TryParseTerm()
+        private Node ParseTerm()
         {
             Token start;
             if (TryEatToken(TokenKind.Identifier, out start))
@@ -366,7 +368,7 @@ namespace TheLang.Syntax
 
             if (TryEatToken(TokenKind.ParenthesesLeft, out start))
             {
-                var expression = TryParseExpression();
+                var expression = ParseExpression();
                 if (expression == null)
                     return null;
 
@@ -401,13 +403,13 @@ namespace TheLang.Syntax
                 // We therefore have to handle the empty procedure differently
                 if (TryEatToken(TokenKind.ParenthesesRight))
                 {
-                    var returnType = TryParseExpression();
+                    var returnType = ParseExpression();
                     if (returnType == null)
                         return null;
 
                     if (TryEatToken(TokenKind.Arrow))
                     {
-                        var block = TryParseCodeBlock();
+                        var block = ParseCodeBlock();
                         if (block == null)
                             return null;
 
@@ -415,14 +417,13 @@ namespace TheLang.Syntax
                         {
                             Block = block,
                             Return = returnType,
-                            Arguments = new Declaration[0]
+                            Arguments = Enumerable.Empty<Declaration>()
                         };
                     }
 
                     return new ProcedureTypeNode(start.Position, start.Kind == TokenKind.KeywordFunction)
                     {
-                        Return = returnType,
-                        Arguments = new Node[0]
+                        Arguments = new []{ returnType }
                     };
                 }
 
@@ -441,21 +442,21 @@ namespace TheLang.Syntax
                             return null;
                         }
 
-                        var declaration = TryParseDeclaration();
+                        var declaration = ParseDeclaration();
                         if (declaration == null)
                             return null;
 
                         arguments.Add(declaration);
                     }
 
-                    var returnType = TryParseExpression();
+                    var returnType = ParseExpression();
                     if (returnType == null)
                         return null;
 
                     Token arrow;
                     if (TryEatToken(TokenKind.Arrow, out arrow))
                     {
-                        var block = TryParseCodeBlock();
+                        var block = ParseCodeBlock();
                         if (block == null)
                             return null;
 
@@ -486,21 +487,21 @@ namespace TheLang.Syntax
                             return null;
                         }
 
-                        var argument = TryParseExpression();
+                        var argument = ParseExpression();
                         if (argument == null)
                             return null;
 
                         arguments.Add(argument);
                     }
 
-                    var returnType = TryParseExpression();
+                    var returnType = ParseExpression();
                     if (returnType == null)
                         return null;
 
+                    arguments.Add(returnType);
                     return new ProcedureTypeNode(start.Position, start.Kind == TokenKind.KeywordFunction)
                     {
                         Arguments = arguments,
-                        Return = returnType
                     };
                 }
             }
@@ -513,9 +514,8 @@ namespace TheLang.Syntax
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="result"></param>
         /// <returns></returns>
-        private CodeBlock TryParseCodeBlock()
+        private CodeBlock ParseCodeBlock()
         {
             Token curlyLeft;
             if (!TryEatToken(TokenKind.CurlyLeft, out curlyLeft))
@@ -531,7 +531,7 @@ namespace TheLang.Syntax
             {
                 if (PeekIs(TokenKind.Identifier) && PeekIs(TokenKind.Colon, 1))
                 {
-                    var declaration = TryParseDeclaration();
+                    var declaration = ParseDeclaration();
                     if (declaration == null)
                         return null;
 
@@ -539,7 +539,7 @@ namespace TheLang.Syntax
                 }
                 else
                 {
-                    var expression = TryParseExpression();
+                    var expression = ParseExpression();
                     if (expression == null)
                         return null;
 

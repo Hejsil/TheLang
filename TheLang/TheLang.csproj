@@ -63,7 +63,9 @@
     <Compile Include="AST\Expressions\Symbol.cs" />
     <Compile Include="AST\FileNode.cs" />
     <Compile Include="Semantics\TypeChecking\TypeChecker.cs" />
+    <Compile Include="Semantics\TypeChecking\TypeId.cs" />
     <Compile Include="Semantics\TypeChecking\TypeInfo.cs" />
+    <Compile Include="Semantics\TypeChecking\TypeInfoStruct.cs" />
     <Compile Include="Semantics\Visitor.cs" />
     <Compile Include="AST\Bases\Node.cs" />
     <Compile Include="AST\ProgramNode.cs" />

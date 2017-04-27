@@ -19,7 +19,7 @@ namespace TheLang
             var files = new List<FileNode>();
             var parser = new Parser(reader, this);
 
-            var fileNode = parser.TryParseFile();
+            var fileNode = parser.ParseFile();
             if (fileNode == null)
                 return false;
 
@@ -75,7 +75,7 @@ namespace TheLang
             {
                 var parser = new Parser(_filesToCompile.Dequeue(), this);
 
-                var fileNode = parser.TryParseFile();
+                var fileNode = parser.ParseFile();
                 if (fileNode == null)
                     return false;
 

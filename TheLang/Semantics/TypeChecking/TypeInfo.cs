@@ -1,83 +1,79 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using OBeautifulCode.Math;
 
-namespace TheLang.Semantics.TypeChecking.Types
+namespace TheLang.Semantics.TypeChecking
 {
     public class TypeInfo
     {
+        public const int Bit8 = 8;
+        public const int Bit16 = 16;
+        public const int Bit32 = 32;
         public const int Bit64 = 64;
         public const int NeedToBeInferedSize = -1;
-        public const int PointerSize = Bit64;
-        public const int Int64Size = Bit64;
-        public const int Float64Size = Bit64;
-        public const int ArraySize = PointerSize + Int64Size;
 
-        public TypeInfo(Kind id, int size = NeedToBeInferedSize, string name = null, IEnumerable<TypeInfo> children = null)
+
+        public TypeInfoStruct Data { get; }
+        public TypeId Id => Data.Id;
+        public int Size => Data.Size;
+        public string Name => Data.Name;
+        public IEnumerable<TypeInfo> Children => Data.Children;
+
+        public TypeInfo(TypeInfoStruct value)
         {
-            // TODO: Infer size, if not provided
-            Id = id;
-            Size = size;
-            Name = name;
-            Children = children;
+            Data = value;
         }
 
-        public TypeInfo(Kind id, params TypeInfo[] children)
+        public TypeInfo(TypeId id, int size = NeedToBeInferedSize, string name = null, IEnumerable<TypeInfo> children = null)
+            : this(new TypeInfoStruct(id, size, name, children))
+        { }
+
+        public TypeInfo(TypeId id, params TypeInfo[] children)
             : this(id, children: (IEnumerable<TypeInfo>)children)
         { }
 
-        public TypeInfo(Kind id, int size, params TypeInfo[] children)
+        public TypeInfo(TypeId id, int size, params TypeInfo[] children)
             : this(id, size, children: (IEnumerable<TypeInfo>)children)
         { }
 
-        public TypeInfo(Kind id, int size, string name = null, params TypeInfo[] children)
-            : this(id, size, name, (IEnumerable<TypeInfo>)children)
+        public TypeInfo(TypeId id, string name, params TypeInfo[] children)
+            : this(id, name: name, children: (IEnumerable<TypeInfo>)children)
         { }
 
-        private int _size;
-
-        public Kind Id { get; }
-        public int Size { get; }
-        public string Name { get; }
-        public IEnumerable<TypeInfo> Children { get; }
-
-        protected bool Equals(TypeInfo other) =>
-            Id == other.Id &&
-            ReferenceEquals(Children, other.Children) &&
-            Children.SequenceEqual(other.Children);
+        public TypeInfo(TypeId id, int size, string name, params TypeInfo[] children)
+            : this(id, size, name, (IEnumerable<TypeInfo>)children)
+        { }
 
         public override bool Equals(object obj)
         {
             if (ReferenceEquals(null, obj)) return false;
             if (ReferenceEquals(this, obj)) return true;
-            return obj.GetType() == GetType() && Equals((TypeInfo)obj);
+            return obj.GetType() == this.GetType() && Equals((TypeInfo) obj);
         }
 
-        public override int GetHashCode() => 
-            HashCodeHelper.Initialize()
-                .Hash(Id)
-                .Hash(Name)
-                .HashCollection(Children)
-                .Value;
+        protected bool Equals(TypeInfo other) => Data.Equals(other.Data);
+        public override int GetHashCode() => Data.GetHashCode();
 
-        public enum Kind
+        public bool IsImplicitlyConvertibleTo(TypeInfo type)
         {
-            Array,
-            Bool,
-            Composit,
-            Field,
-            Constant,
-            Float,
-            Integer,
-            Nothing,
-            Pointer,
-            UniquePointer,
-            String,
-            Tuple,
-            Type
+            if (Id != type.Id)
+                return false;
+
+            if (Size == type.Size)
+                return true;
+
+            switch (Id)
+            {
+                case TypeId.UInteger:
+                case TypeId.Integer:
+                case TypeId.Float:
+                    if (Id != type.Id)
+                        return false;
+
+                    return Size <= type.Size;
+            }
+
+            return false;
         }
     }
 }
