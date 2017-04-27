@@ -111,14 +111,51 @@ namespace TheLang.Syntax
 
             if (TryEatToken(TokenKind.Colon, out colonOrEqual) || TryEatToken(TokenKind.Equal, out colonOrEqual))
             {
+                if (colonOrEqual.Kind == TokenKind.Colon && TryEatToken(TokenKind.KeywordStruct))
+                {
+                    if (!TryEatToken(TokenKind.CurlyRight, out peek))
+                    {
+                        // TODO: Error
+                        _compiler.ReportError(peek.Position, "");
+                        return null;
+                    }
+
+                    var fields = new List<Declaration>();
+                    while (!TryEatToken(TokenKind.CurlyRight, out peek))
+                    {
+                        if (peek.Kind == TokenKind.Identifier)
+                        {
+                            var declaration = ParseDeclaration();
+                            if (declaration == null)
+                                return null;
+
+                            fields.Add(declaration);
+                        }
+                        else
+                        {
+                            _compiler.ReportError(peek.Position,
+                                $"Expected {TokenKind.Identifier}, but got {peek.Kind}.",
+                                "Only declarations can exist in the global scope of a program.");
+                            return null;
+                        }
+                    }
+
+                    return new CompositTypeDeclaration(identifier.Position)
+                    {
+                        DeclaredType = type,
+                        Name = identifier.Value,
+                        Fields = fields
+                    };
+                }
+
                 var expression = ParseExpression();
                 if (expression == null)
                     return null;
 
-                return new Variable(colonOrEqual.Position, colonOrEqual.Kind == TokenKind.Colon)
+                return new Variable(identifier.Position, colonOrEqual.Kind == TokenKind.Colon)
                 {
                     DeclaredType = type,
-                    Name = peek.Value,
+                    Name = identifier.Value,
                     Value = expression
                 };
             }
@@ -188,9 +225,9 @@ namespace TheLang.Syntax
         /// <summary>
         /// 
         /// Unary syntax:
-        ///   Unary -> ( UnaryOperator | ArrayTypePrefix )* Term ( CompositTypeLiteral | Call | Indexing )*
+        ///   Unary -> ( UnaryOperator | ArrayTypePrefix )* Term ( StructLiteral | Call | Indexing )*
         ///   ArrayTypePrefix -> "[" ","* "]"
-        ///   CompositTypeLiteral -> "{" ( EqualsExpression ( "," EqualsExpression )* ","? )? "}"
+        ///   StructLiteral -> "{" ( EqualsExpression ( "," EqualsExpression )* ","? )? "}"
         ///   EqualsExpression -> Indentifier "=" Expression
         ///   Call -> "(" ( Expression ( "," Expression )* )? ")"
         ///   Indexing -> "[" Expression "]"
@@ -218,7 +255,7 @@ namespace TheLang.Syntax
             {
                 if (TryEatToken(TokenKind.CurlyLeft))
                 {
-                    var assignments = new List<BinaryOperator>();
+                    var assignments = new List<StructLiteral.Assignment>();
 
                     Token peek;
                     while (TryEatToken(TokenKind.Identifier, out peek))
@@ -237,7 +274,7 @@ namespace TheLang.Syntax
                         if (right == null)
                             return null;
 
-                        assignments.Add(new BinaryOperator(left.Position, BinaryOperatorKind.Assign)
+                        assignments.Add(new StructLiteral.Assignment(left.Position)
                         {
                             Left = left,
                             Right = right
@@ -254,7 +291,7 @@ namespace TheLang.Syntax
                         return null;
                     }
 
-                    leaf = new CompositTypeLiteral(leaf.Position) { Child = leaf, Values = assignments };
+                    leaf = new StructLiteral(leaf.Position) { Child = leaf, Values = assignments };
                     continue;
                 }
 
@@ -378,13 +415,6 @@ namespace TheLang.Syntax
 
                 _compiler.ReportError(parRight.Position,
                     $"Could not find a pair for the left parentheses at {start.Position.Line}:{start.Position.Column}. Expected {TokenKind.ParenthesesRight}, but got {parRight.Kind}.");
-                return null;
-            }
-            
-            if (TryEatToken(TokenKind.KeywordStruct))
-            {
-                // TODO: implement indexing
-                _compiler.ReportError(start.Position, "Not Implemented");
                 return null;
             }
 

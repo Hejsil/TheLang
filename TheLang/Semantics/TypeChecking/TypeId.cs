@@ -4,7 +4,7 @@
     {
         Array,
         Bool,
-        Composit,
+        Struct,
         Field,
         Constant,
         Float,

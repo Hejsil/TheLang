@@ -70,33 +70,6 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(Declaration node)
-        {
-            if (!Visit(node.DeclaredType))
-                return false;
-
-            var declaredType = node.DeclaredType.Type;
-            if (declaredType.Id != TypeId.Type)
-            {
-                _compiler.ReportError(node.DeclaredType.Position, 
-                    $"A variable can only be declared a Type, and not {node.DeclaredType.Type}.");
-                return false;
-            }
-
-            node.Type = declaredType;
-
-            var peekTable = _symbolTable.Peek();
-            if (peekTable.ContainsKey(node.Name))
-            {
-                _compiler.ReportError(node.Position, 
-                    $"Variable have already been declared in this scope.");
-                return false;
-            }
-
-            peekTable.Add(node.Name, node.Type);
-            return true;
-        }
-
         protected override bool Visit(Variable node)
         {
             if (!Visit(node.DeclaredType))
@@ -122,7 +95,7 @@ namespace TheLang.Semantics.TypeChecking
 
                 if (!valueType.IsImplicitlyConvertibleTo(declaredType))
                 {
-                    _compiler.ReportError(node.Position, 
+                    _compiler.ReportError(node.Position,
                         $"{valueType} is not assignable to {declaredType}.");
                     return false;
                 }
@@ -154,6 +127,33 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
+        protected override bool Visit(Declaration node)
+        {
+            if (!Visit(node.DeclaredType))
+                return false;
+
+            var declaredType = node.DeclaredType.Type;
+            if (declaredType.Id != TypeId.Type)
+            {
+                _compiler.ReportError(node.DeclaredType.Position, 
+                    $"A variable can only be declared a Type, and not {node.DeclaredType.Type}.");
+                return false;
+            }
+
+            node.Type = declaredType;
+
+            var peekTable = _symbolTable.Peek();
+            if (peekTable.ContainsKey(node.Name))
+            {
+                _compiler.ReportError(node.Position, 
+                    $"Variable have already been declared in this scope.");
+                return false;
+            }
+
+            peekTable.Add(node.Name, node.Type);
+            return true;
+        }
+
         protected override bool Visit(BinaryOperator node)
         {
             if (!Visit(node.Left))
@@ -169,7 +169,7 @@ namespace TheLang.Semantics.TypeChecking
                 {
                     case TypeId.Array:
                     case TypeId.String:
-                    case TypeId.Composit:
+                    case TypeId.Struct:
                         var field = leftType.Children.FirstOrDefault(f => f.Id == TypeId.Field && f.Name == name);
 
                         if (field == null)
@@ -319,7 +319,58 @@ namespace TheLang.Semantics.TypeChecking
 
         protected override bool Visit(UnaryOperator node)
         {
-            throw new NotImplementedException();
+            if (!Visit(node.Child))
+                return false;
+
+            var childType = node.Child.Type;
+            switch (node.Kind)
+            {
+                case UnaryOperatorKind.Negative:
+                case UnaryOperatorKind.Positive:
+                    if (childType.Id != TypeId.Integer &&
+                        childType.Id != TypeId.UInteger &&
+                        childType.Id != TypeId.Float)
+                    {
+                        // TODO: Error
+                        _compiler.ReportError(node.Position, $"");
+                        return false;
+                    }
+
+                    node.Type = childType;
+                    return true;
+
+                case UnaryOperatorKind.Not:
+                    if (childType.Id != TypeId.Bool)
+                    {
+                        // TODO: Error
+                        _compiler.ReportError(node.Position, $"");
+                        return false;
+                    }
+
+                    node.Type = childType;
+                    return true;
+
+                case UnaryOperatorKind.Reference:
+                    node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Pointer, childType));
+                    return true;
+
+                case UnaryOperatorKind.UniqueReference:
+                    node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.UniquePointer, childType));
+                    return true;
+
+                case UnaryOperatorKind.Dereference:
+                    if (childType.Id != TypeId.Pointer && childType.Id != TypeId.UniquePointer)
+                    {
+                        // TODO: Error
+                        _compiler.ReportError(node.Position, $"");
+                        return false;
+                    }
+
+                    node.Type = childType.Children.First();
+                    return true;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
         }
 
         protected override bool Visit(Symbol node)
@@ -335,9 +386,90 @@ namespace TheLang.Semantics.TypeChecking
             return false;
         }
 
-        protected override bool Visit(CompositTypeLiteral node)
+        protected override bool Visit(StructLiteral node)
         {
-            throw new NotImplementedException();
+            if (!Visit(node.Child))
+                return false;
+            if (!node.Values.All(a => Visit(a.Right)))
+                return false;
+
+            var childType = node.Child.Type;
+            if (childType.Id != TypeId.Type)
+            {
+                // TODO: Error
+                _compiler.ReportError(node.Position, $"");
+                return false;
+            }
+
+            var structType = childType.Children.First();
+            if (structType.Id != TypeId.Struct)
+            {
+                // TODO: Error
+                _compiler.ReportError(node.Position, $"");
+                return false;
+            }
+
+            var groups = node.Values
+                .GroupBy(b => b.Left.Name)
+                .SkipWhile(g => g.Count() == 1);
+
+            var duplicates = groups as IGrouping<string, StructLiteral.Assignment>[] ?? groups.ToArray();
+            if (duplicates.Length != 0)
+            {
+                foreach (var group in duplicates)
+                {
+                    var first = group.First();
+                    foreach (var value in group.Skip(1))
+                    {
+                        // TODO: Error
+                        _compiler.ReportError(node.Position,
+                            $"");
+                    }
+                }
+
+                return false;
+            }
+
+            foreach (var value in node.Values)
+            {
+                var symbol = value.Left;
+                var expr = value.Right;
+
+                var structField = structType.Children.FirstOrDefault(f => f.Name == symbol.Name);
+                if (structField == null)
+                {
+                    // TODO: Error
+                    _compiler.ReportError(value.Position,
+                        $"");
+                    return false;
+                }
+
+                var fieldType = structField.Children.First();
+                if (!expr.Type.IsImplicitlyConvertibleTo(fieldType))
+                {
+                    // TODO: Error
+                    _compiler.ReportError(value.Position,
+                        $"");
+                    return false;
+                }
+            }
+
+            node.Type = structType;
+            return true;
+        }
+
+        protected override bool Visit(StructType node)
+        {
+            if (!VisitCollection(node.Fields))
+                return false;
+
+            var fields = node.Fields
+                .Where(f => !(f is Variable && ((Variable)f).IsConstant))
+                .Select(f => GetTypeInfo(new TypeInfoStruct(TypeId.Field, f.Name, f.Type)));
+
+            var composit = GetTypeInfo(new TypeInfoStruct(TypeId.Struct, children: fields));
+            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Type, composit));
+            return true;
         }
 
         protected override bool Visit(Call node)

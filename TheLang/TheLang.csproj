@@ -48,8 +48,9 @@
     <Compile Include=".OBeautifulCode.Recipes\OBeautifulCode.Math\HashCodeHelper.cs" />
     <Compile Include="AST\Bases\BinaryNode.cs" />
     <Compile Include="AST\Expressions\Call.cs" />
+    <Compile Include="AST\Expressions\Literals\StructType.cs" />
     <Compile Include="AST\Expressions\Literals\TypedProcedureLiteral.cs" />
-    <Compile Include="AST\Expressions\Literals\CompositTypeLiteral.cs" />
+    <Compile Include="AST\Expressions\Literals\StructLiteral.cs" />
     <Compile Include="AST\Expressions\Literals\FloatLiteral.cs" />
     <Compile Include="AST\Expressions\Literals\IntegerLiteral.cs" />
     <Compile Include="AST\Expressions\Literals\ProcedureTypeNode.cs" />

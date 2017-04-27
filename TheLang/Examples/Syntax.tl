@@ -9,3 +9,8 @@ test : proc(Int, Int) Int : (x, y) => {
 }
 
 test : proc(Int, Int) Int : (x, y) => x + y
+
+test :: struct {
+    test: Int
+
+}

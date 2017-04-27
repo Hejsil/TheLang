@@ -3,7 +3,7 @@ using TheLang.Syntax;
 
 namespace TheLang.AST.Expressions.Operators
 {
-    public partial class BinaryOperator : BinaryNode
+    public class BinaryOperator : BinaryNode
     {
         public BinaryOperator(Position position, BinaryOperatorKind kind) 
             : base(position)
