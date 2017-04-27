@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using TheLang.AST;
 using TheLang.AST.Expressions;
 using TheLang.AST.Expressions.Literals;
 using TheLang.AST.Expressions.Operators;
@@ -14,13 +15,64 @@ namespace TheLang.Semantics.TypeChecking
         private readonly Dictionary<TypeInfoStruct, TypeInfo> _existingTypes =
             new Dictionary<TypeInfoStruct, TypeInfo>(TypeInfoStruct.Comparer);
 
-        private readonly Stack<Dictionary<string, TypeInfo>> _symbolTable =
-            new Stack<Dictionary<string, TypeInfo>>();
+        private readonly Stack<Dictionary<string, TypeInfo>> _symbolTable = new Stack<Dictionary<string, TypeInfo>>();
+        private readonly Stack<TypeInfo> _returnTypeStack = new Stack<TypeInfo>();
+
         private readonly Compiler _compiler;
+
 
         public TypeChecker(Compiler compiler)
         {
             _compiler = compiler;
+        }
+
+        protected override bool Visit(Return node)
+        {
+            if (!Visit(node.Child))
+                return false;
+
+            var returnType = _returnTypeStack.Peek();
+            var childType = node.Child.Type;
+            if (!childType.IsImplicitlyConvertibleTo(returnType))
+            {
+                // TODO: Error
+                _compiler.ReportError(node.Child.Position,
+                    $"");
+                return false;
+            }
+
+            node.Type = returnType;
+            return true;
+        }
+
+        protected override bool Visit(TypedProcedureLiteral node)
+        {
+            _symbolTable.Push(new Dictionary<string, TypeInfo>());
+
+            if (!VisitCollection(node.Arguments) || !Visit(node.Return))
+            {
+                _symbolTable.Pop();
+                return false;
+            }
+
+            var args = new List<TypeInfo>(node.Arguments.Select(a => a.Type)) { node.Return.Type };
+            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Procedure, args));
+            _returnTypeStack.Push(node.Return.Type);
+
+            var result = Visit(node.Block);
+            _symbolTable.Pop();
+            _returnTypeStack.Pop();
+
+            return result;
+        }
+
+        protected override bool Visit(ProgramNode node)
+        {
+            _symbolTable.Push(new Dictionary<string, TypeInfo>());
+            var result = base.Visit(node);
+            _symbolTable.Pop();
+
+            return result;
         }
 
         protected override bool Visit(StringLiteral node)
@@ -30,7 +82,7 @@ namespace TheLang.Semantics.TypeChecking
             var integer = GetTypeInfo(new TypeInfoStruct(TypeId.Integer, TypeInfo.Bit64));
             var dataField = GetTypeInfo(new TypeInfoStruct(TypeId.Field, "data", pointer));
             var lengthField = GetTypeInfo(new TypeInfoStruct(TypeId.Field, "length", integer));
-            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.String, dataField, lengthField));
+            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.String, chr, dataField, lengthField));
             return true;
         }
 
@@ -57,7 +109,7 @@ namespace TheLang.Semantics.TypeChecking
             var integer = GetTypeInfo(new TypeInfoStruct(TypeId.Integer, TypeInfo.Bit64));
             var dataField = GetTypeInfo(new TypeInfoStruct(TypeId.Field, "data", pointer));
             var lengthField = GetTypeInfo(new TypeInfoStruct(TypeId.Field, "length", integer));
-            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Array, node.Dimensions, dataField, lengthField));
+            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Array, node.Child.Type, dataField, lengthField));
             return true;
         }
 
@@ -126,6 +178,8 @@ namespace TheLang.Semantics.TypeChecking
             peekTable.Add(node.Name, node.Type);
             return true;
         }
+
+        protected override bool Visit(Infer node) => true;
 
         protected override bool Visit(Declaration node)
         {
@@ -386,76 +440,16 @@ namespace TheLang.Semantics.TypeChecking
             return false;
         }
 
-        protected override bool Visit(StructLiteral node)
+        protected override bool Visit(TypeLiteral node)
         {
             if (!Visit(node.Child))
                 return false;
-            if (!node.Values.All(a => Visit(a.Right)))
+            if (!VisitCollection(node.Values))
                 return false;
 
-            var childType = node.Child.Type;
-            if (childType.Id != TypeId.Type)
-            {
-                // TODO: Error
-                _compiler.ReportError(node.Position, $"");
-                return false;
-            }
-
-            var structType = childType.Children.First();
-            if (structType.Id != TypeId.Struct)
-            {
-                // TODO: Error
-                _compiler.ReportError(node.Position, $"");
-                return false;
-            }
-
-            var groups = node.Values
-                .GroupBy(b => b.Left.Name)
-                .SkipWhile(g => g.Count() == 1);
-
-            var duplicates = groups as IGrouping<string, StructLiteral.Assignment>[] ?? groups.ToArray();
-            if (duplicates.Length != 0)
-            {
-                foreach (var group in duplicates)
-                {
-                    var first = group.First();
-                    foreach (var value in group.Skip(1))
-                    {
-                        // TODO: Error
-                        _compiler.ReportError(node.Position,
-                            $"");
-                    }
-                }
-
-                return false;
-            }
-
-            foreach (var value in node.Values)
-            {
-                var symbol = value.Left;
-                var expr = value.Right;
-
-                var structField = structType.Children.FirstOrDefault(f => f.Name == symbol.Name);
-                if (structField == null)
-                {
-                    // TODO: Error
-                    _compiler.ReportError(value.Position,
-                        $"");
-                    return false;
-                }
-
-                var fieldType = structField.Children.First();
-                if (!expr.Type.IsImplicitlyConvertibleTo(fieldType))
-                {
-                    // TODO: Error
-                    _compiler.ReportError(value.Position,
-                        $"");
-                    return false;
-                }
-            }
-
-            node.Type = structType;
-            return true;
+            // TODO: Implement
+            _compiler.ReportError(node.Position, $"Not Implemented");
+            return false;
         }
 
         protected override bool Visit(StructType node)
@@ -469,6 +463,41 @@ namespace TheLang.Semantics.TypeChecking
 
             var composit = GetTypeInfo(new TypeInfoStruct(TypeId.Struct, children: fields));
             node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Type, composit));
+            return true;
+        }
+
+        protected override bool Visit(Indexing node)
+        {
+            if (!Visit(node.Child))
+                return false;
+            if (!VisitCollection(node.Arguments))
+                return false;
+
+            var childType = node.Child.Type;
+            if (childType.Id != TypeId.Array || childType.Id != TypeId.String)
+            {
+                // TODO: Error
+                _compiler.ReportError(node.Position, $"");
+                return false;
+            }
+
+            if (childType.Id == TypeId.Array || childType.Size != node.Arguments.Count())
+            {
+                // TODO: Error
+                _compiler.ReportError(node.Position, $"");
+                return false;
+            }
+
+            if (!node.Arguments.All(arg => arg.Type.Id == TypeId.Integer || arg.Type.Id == TypeId.UInteger))
+            {
+                // TODO: Error
+                _compiler.ReportError(node.Position, $"");
+                return false;
+            }
+
+            // Array type info have child, which is not a field, that says what the childrens type is, without needing
+            // to find the field "data" and go through the pointer for this field
+            node.Type = childType.Children.First(field => field.Id != TypeId.Field);
             return true;
         }
 

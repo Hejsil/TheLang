@@ -5,12 +5,10 @@ namespace TheLang.AST.Expressions.Operators
 {
     public class ArrayPostfix : UnaryNode
     {
-        public ArrayPostfix(Position position, int dimensions) 
+        public ArrayPostfix(Position position)
             : base(position)
-        {
-            Dimensions = dimensions;
-        }
+        { }
 
-        public int Dimensions { get; }
+        public Node Size { get; set; }
     }
 }

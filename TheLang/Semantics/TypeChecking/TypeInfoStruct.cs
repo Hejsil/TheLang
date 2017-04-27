@@ -1,35 +1,38 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using OBeautifulCode.Math;
+using TheLang.AST.Expressions.Literals;
 
 namespace TheLang.Semantics.TypeChecking
 {
     public struct TypeInfoStruct
     {
-
-        public TypeInfoStruct(TypeId id, int size = TypeInfo.NeedToBeInferedSize, string name = null, IEnumerable<TypeInfo> children = null)
+        public TypeInfoStruct(TypeId id, IEnumerable<TypeInfo> children, int size = TypeInfo.NeedToBeInferedSize, string name = null)
         {
-            // TODO: Infer size, if not provided
             Id = id;
             Size = size;
             Name = name;
             Children = children;
         }
 
+        public TypeInfoStruct(TypeId id, int size = TypeInfo.NeedToBeInferedSize, string name = null)
+            : this(id, Enumerable.Empty<TypeInfo>(), size, name)
+        { }
+
         public TypeInfoStruct(TypeId id, params TypeInfo[] children)
-            : this(id, children: (IEnumerable<TypeInfo>)children)
+            : this(id, (IEnumerable<TypeInfo>)children)
         { }
 
         public TypeInfoStruct(TypeId id, int size, params TypeInfo[] children)
-            : this(id, size, children: (IEnumerable<TypeInfo>)children)
+            : this(id, children, size)
         { }
 
         public TypeInfoStruct(TypeId id, string name, params TypeInfo[] children)
-            : this(id, name: name, children: (IEnumerable<TypeInfo>)children)
+            : this(id, children, name: name)
         { }
 
         public TypeInfoStruct(TypeId id, int size, string name, params TypeInfo[] children)
-            : this(id, size, name, (IEnumerable<TypeInfo>)children)
+            : this(id, children, size, name)
         { }
 
         public TypeId Id { get; }
@@ -39,33 +42,25 @@ namespace TheLang.Semantics.TypeChecking
 
         public TypeInfo Allocate() => new TypeInfo(this);
 
-        public override int GetHashCode() =>
-            HashCodeHelper.Initialize()
-                .Hash(Id)
-                .Hash(Name)
-                .HashElements(Children)
-                .Value;
-
-        public bool Equals(ref TypeInfoStruct other) =>
-            Id == other.Id &&
-            Size == other.Size &&
-            string.Equals(Name, other.Name) &&
-            Children.SequenceEqual(other.Children);
-
-        public override bool Equals(object obj)
-        {
-            if (ReferenceEquals(null, obj)) return false;
-            return obj is TypeInfoStruct && Equals((TypeInfoStruct) obj);
-        }
-
-        public static bool operator ==(TypeInfoStruct type1, TypeInfoStruct type2) => type1.Equals(type2);
-        public static bool operator !=(TypeInfoStruct type1, TypeInfoStruct type2) => !type1.Equals(type2);
-
         public static IEqualityComparer<TypeInfoStruct> Comparer { get; } = new TypeInfoStructEqualityComparer();
         private sealed class TypeInfoStructEqualityComparer : IEqualityComparer<TypeInfoStruct>
         {
-            public bool Equals(TypeInfoStruct x, TypeInfoStruct y) => x == y;
-            public int GetHashCode(TypeInfoStruct obj) => obj.GetHashCode();
+            public bool Equals(TypeInfoStruct x, TypeInfoStruct y)
+            {
+                return x.Id == y.Id &&
+                       x.Size == y.Size &&
+                       string.Equals(x.Name, y.Name) &&
+                       x.Children.SequenceEqual(y.Children);
+            }
+
+            public int GetHashCode(TypeInfoStruct obj)
+            {
+                return HashCodeHelper.Initialize()
+                    .Hash(obj.Id)
+                    .Hash(obj.Name)
+                    .HashElements(obj.Children)
+                    .Value;
+            }
         }
     }
 }

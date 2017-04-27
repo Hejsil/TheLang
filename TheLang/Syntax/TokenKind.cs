@@ -41,6 +41,7 @@ namespace TheLang.Syntax
         KeywordStruct,
         KeywordProcedure,
         KeywordFunction,
+        KeywordReturn,
 
         Exponent,
         ExponentEqual,
@@ -61,6 +62,6 @@ namespace TheLang.Syntax
         Comma,
 
         EndOfFile,
-        Unknown,
+        Unknown
     }
 }

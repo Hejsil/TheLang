@@ -48,9 +48,10 @@
     <Compile Include=".OBeautifulCode.Recipes\OBeautifulCode.Math\HashCodeHelper.cs" />
     <Compile Include="AST\Bases\BinaryNode.cs" />
     <Compile Include="AST\Expressions\Call.cs" />
+    <Compile Include="AST\Expressions\Literals\Infer.cs" />
     <Compile Include="AST\Expressions\Literals\StructType.cs" />
     <Compile Include="AST\Expressions\Literals\TypedProcedureLiteral.cs" />
-    <Compile Include="AST\Expressions\Literals\StructLiteral.cs" />
+    <Compile Include="AST\Expressions\Literals\TypeLiteral.cs" />
     <Compile Include="AST\Expressions\Literals\FloatLiteral.cs" />
     <Compile Include="AST\Expressions\Literals\IntegerLiteral.cs" />
     <Compile Include="AST\Expressions\Literals\ProcedureTypeNode.cs" />
@@ -59,10 +60,12 @@
     <Compile Include="AST\Expressions\Operators\AssociativityKind.cs" />
     <Compile Include="AST\Expressions\Operators\BinaryOperator.cs" />
     <Compile Include="AST\Expressions\Operators\BinaryOperatorKind.cs" />
+    <Compile Include="AST\Expressions\Operators\Indexing.cs" />
     <Compile Include="AST\Expressions\Operators\UnaryOperator.cs" />
     <Compile Include="AST\Expressions\Operators\UnaryOperatorKind.cs" />
     <Compile Include="AST\Expressions\Symbol.cs" />
     <Compile Include="AST\FileNode.cs" />
+    <Compile Include="AST\Statments\Return.cs" />
     <Compile Include="Semantics\TypeChecking\TypeChecker.cs" />
     <Compile Include="Semantics\TypeChecking\TypeId.cs" />
     <Compile Include="Semantics\TypeChecking\TypeInfo.cs" />

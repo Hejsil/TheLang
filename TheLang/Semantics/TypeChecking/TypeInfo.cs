@@ -12,7 +12,6 @@ namespace TheLang.Semantics.TypeChecking
         public const int Bit64 = 64;
         public const int NeedToBeInferedSize = -1;
 
-
         public TypeInfoStruct Data { get; }
         public TypeId Id => Data.Id;
         public int Size => Data.Size;
@@ -24,31 +23,11 @@ namespace TheLang.Semantics.TypeChecking
             Data = value;
         }
 
-        public TypeInfo(TypeId id, int size = NeedToBeInferedSize, string name = null, IEnumerable<TypeInfo> children = null)
-            : this(new TypeInfoStruct(id, size, name, children))
-        { }
-
-        public TypeInfo(TypeId id, params TypeInfo[] children)
-            : this(id, children: (IEnumerable<TypeInfo>)children)
-        { }
-
-        public TypeInfo(TypeId id, int size, params TypeInfo[] children)
-            : this(id, size, children: (IEnumerable<TypeInfo>)children)
-        { }
-
-        public TypeInfo(TypeId id, string name, params TypeInfo[] children)
-            : this(id, name: name, children: (IEnumerable<TypeInfo>)children)
-        { }
-
-        public TypeInfo(TypeId id, int size, string name, params TypeInfo[] children)
-            : this(id, size, name, (IEnumerable<TypeInfo>)children)
-        { }
-
         public override bool Equals(object obj)
         {
             if (ReferenceEquals(null, obj)) return false;
             if (ReferenceEquals(this, obj)) return true;
-            return obj.GetType() == this.GetType() && Equals((TypeInfo) obj);
+            return obj.GetType() == GetType() && Equals((TypeInfo) obj);
         }
 
         protected bool Equals(TypeInfo other) => Data.Equals(other.Data);
