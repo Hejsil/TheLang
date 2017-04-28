@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace TheLang.Semantics.TypeChecking
 {
@@ -23,6 +25,24 @@ namespace TheLang.Semantics.TypeChecking
 
         public bool IsImplicitlyConvertibleTo(TypeInfo type)
         {
+            if (Id == TypeId.UNumber || Id == TypeId.Number)
+            {
+                switch (type.Id)
+                {
+                    case TypeId.UInteger:
+                        return Id == TypeId.UNumber;
+                    case TypeId.UNumber:
+                        return Id == TypeId.UNumber;
+                    case TypeId.Number:
+                    case TypeId.Integer:
+                    case TypeId.Float:
+                        return true;
+
+                    default:
+                        return false;
+                }
+            }
+
             if (Id != type.Id)
                 return false;
 
@@ -34,13 +54,55 @@ namespace TheLang.Semantics.TypeChecking
                 case TypeId.UInteger:
                 case TypeId.Integer:
                 case TypeId.Float:
-                    if (Id != type.Id)
-                        return false;
-
                     return Size <= type.Size;
             }
 
             return false;
+        }
+
+        public override string ToString()
+        {
+            switch (Id)
+            {
+                case TypeId.Array:
+                    return $"[]{Children.First()}";
+                case TypeId.Bool:
+                    return $"Bool{Size}";
+                case TypeId.Struct:
+                    return Name;
+                case TypeId.Field:
+                    return $"{Name}: {Children.First()}";
+                case TypeId.Constant:
+                    return $"Const({Children.First()})";
+                case TypeId.Float:
+                    return $"Float{Size}";
+                case TypeId.Number:
+                    return "SNumber";
+                case TypeId.UNumber:
+                    return "UNumber";
+                case TypeId.Integer:
+                    return $"Int{Size}";
+                case TypeId.UInteger:
+                    return $"UInt{Size}";
+                case TypeId.Nothing:
+                    return "Nothing";
+                case TypeId.Pointer:
+                    return $"@{Children.First()}";
+                case TypeId.UniquePointer:
+                    return $"u@{Children.First()}";
+                case TypeId.String:
+                    return "String";
+                case TypeId.Procedure:
+                    return $"proc({string.Join(", ", Children.Take(Children.Count() - 1))}) {Children.Last()}";
+                case TypeId.Function:
+                    return $"func({string.Join(", ", Children.Take(Children.Count() - 1))}) {Children.Last()}";
+                case TypeId.Tuple:
+                    return $"({string.Join(", ", Children)})";
+                case TypeId.Type:
+                    return "Type";
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
         }
     }
 }

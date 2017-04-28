@@ -23,10 +23,30 @@ namespace TheLang.Tests
         [TestCase("const :: 1.0 as Float", TypeId.Float)]
 
         [TestCase("cost :: 1 * 1", TypeId.Integer)]
-        [TestCase("cost :: 1.0 * 1.0", TypeId.UInteger)]
+        [TestCase("cost :: -1 * -1", TypeId.Integer)]
+        [TestCase("cost :: -1 * 1", TypeId.Integer)]
+        [TestCase("cost :: 1 * -1", TypeId.Integer)]
+        [TestCase("cost :: 1.0 * 1.0", TypeId.Float)]
+        [TestCase("cost :: 1.0 * 1", TypeId.Float)]
+        [TestCase("cost :: 1 * 1.0", TypeId.Float)]
         [TestCase("cost : Int : 1 * 1", TypeId.Integer)]
+        [TestCase("cost : Int : -1 * 1", TypeId.Integer)]
+        [TestCase("cost : Int : -1 * -1", TypeId.Integer)]
+        [TestCase("cost : Int : 1 * -1", TypeId.Integer)]
         [TestCase("cost : UInt : 1 * 1", TypeId.UInteger)]
-        [TestCase("cost :: 1.0 * 1.0", TypeId.UInteger)]
+
+        [TestCase("cost :: 1 * 1", TypeId.Integer)]
+        [TestCase("cost :: -1 * -1", TypeId.Integer)]
+        [TestCase("cost :: -1 * 1", TypeId.Integer)]
+        [TestCase("cost :: 1 * -1", TypeId.Integer)]
+        [TestCase("cost :: 1.0 * 1.0", TypeId.Float)]
+        [TestCase("cost :: 1.0 * 1", TypeId.Float)]
+        [TestCase("cost :: 1 * 1.0", TypeId.Float)]
+        [TestCase("cost : Int : 1 * 1", TypeId.Integer)]
+        [TestCase("cost : Int : -1 * 1", TypeId.Integer)]
+        [TestCase("cost : Int : -1 * -1", TypeId.Integer)]
+        [TestCase("cost : Int : 1 * -1", TypeId.Integer)]
+        [TestCase("cost : UInt : 1 * 1", TypeId.UInteger)]
 
 
 //        [TestCase("t1 / t2 / t3", TypeId.Integer)]
@@ -55,7 +75,7 @@ namespace TheLang.Tests
             Assert.True(compiler.TypeCheck());
             var first = compiler.Tree.Files.First().Declarations.First();
 
-            Assert.AreEqual(first.Type.Id, topType);
+            Assert.AreEqual(topType, first.Type.Id);
         }
     }
 }

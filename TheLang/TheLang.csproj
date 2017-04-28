@@ -76,6 +76,7 @@
     <Compile Include="AST\Expressions\Operators\Unary\Indexing.cs" />
     <Compile Include="AST\Expressions\Operators\Unary\Negative.cs" />
     <Compile Include="AST\Expressions\Operators\Unary\Not.cs" />
+    <Compile Include="AST\Expressions\Operators\Unary\Parentheses.cs" />
     <Compile Include="AST\Expressions\Operators\Unary\Positive.cs" />
     <Compile Include="AST\Expressions\Operators\Unary\Reference.cs" />
     <Compile Include="AST\Expressions\Operators\Unary\UniqueReference.cs" />

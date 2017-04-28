@@ -8,6 +8,8 @@
         Field,
         Constant,
         Float,
+        Number,
+        UNumber,
         Integer,
         UInteger,
         Nothing,

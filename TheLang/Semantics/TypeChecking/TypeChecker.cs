@@ -22,7 +22,6 @@ namespace TheLang.Semantics.TypeChecking
 
         private readonly Compiler _compiler;
 
-
         public TypeChecker(Compiler compiler)
         {
             _compiler = compiler;
@@ -70,7 +69,20 @@ namespace TheLang.Semantics.TypeChecking
 
         protected override bool Visit(ProgramNode node)
         {
-            _symbolTable.Push(new Dictionary<string, TypeInfo>());
+            var int64 = GetTypeInfo(new TypeInfoStruct(TypeId.Integer, TypeInfo.Bit64));
+            var uint64 = GetTypeInfo(new TypeInfoStruct(TypeId.UInteger, TypeInfo.Bit64));
+            var float64 = GetTypeInfo(new TypeInfoStruct(TypeId.Float, TypeInfo.Bit64));
+            var bool8 = GetTypeInfo(new TypeInfoStruct(TypeId.Bool, TypeInfo.Bit8));
+
+            var top = new Dictionary<string, TypeInfo>()
+            {
+                { "Int", GetTypeInfo(new TypeInfoStruct(TypeId.Type, int64)) },
+                { "UInt", GetTypeInfo(new TypeInfoStruct(TypeId.Type, uint64)) },
+                { "Float", GetTypeInfo(new TypeInfoStruct(TypeId.Type, float64)) },
+                { "Bool", GetTypeInfo(new TypeInfoStruct(TypeId.Type, bool8)) },
+            };
+
+            _symbolTable.Push(top);
             var result = base.Visit(node);
             _symbolTable.Pop();
 
@@ -90,7 +102,7 @@ namespace TheLang.Semantics.TypeChecking
 
         protected override bool Visit(IntegerLiteral node)
         {
-            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Integer));
+            node.Type = GetTypeInfo(new TypeInfoStruct(node.Value < 0 ? TypeId.Number : TypeId.UNumber));
             return true;
         }
 
@@ -118,7 +130,7 @@ namespace TheLang.Semantics.TypeChecking
             if (!VisitCollection(node.Items))
                 return false;
 
-            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Tuple, children: node.Items.Select(i => i.Type)));
+            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Tuple, node.Items.Select(i => i.Type)));
             return true;
         }
 
@@ -134,37 +146,29 @@ namespace TheLang.Semantics.TypeChecking
             if (declaredType == null)
             {
                 node.Type = node.Value.Type;
+
+                if (node.Type.Id == TypeId.UNumber || node.Type.Id == TypeId.Number)
+                    node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Integer, TypeInfo.Bit64));
             }
             else if (declaredType.Id != TypeId.Type)
             {
                 _compiler.ReportError(node.DeclaredType.Position,
-                    $"A variable can only be declared a Type, and not {node.DeclaredType.Type}.");
+                    $"A variable can only be declared a Type, and not {declaredType.Id}.");
                 return false;
             }
             else
             {
+                declaredType = declaredType.Children.First();
                 var valueType = node.Value.Type;
 
                 if (!valueType.IsImplicitlyConvertibleTo(declaredType))
                 {
                     _compiler.ReportError(node.Position,
-                        $"{valueType} is not assignable to {declaredType}.");
+                        $"{valueType.Id} is not assignable to {declaredType.Id}.");
                     return false;
                 }
 
-                switch (node.Type.Id)
-                {
-                    case TypeId.UInteger:
-                    case TypeId.Integer:
-                    case TypeId.Float:
-                        if (node.Type.Size == TypeInfo.NeedToBeInferedSize)
-                            node.Type = GetTypeInfo(new TypeInfoStruct(node.Type.Id, TypeInfo.Bit64));
-                        break;
-
-                    default:
-                        node.Type = declaredType;
-                        break;
-                }
+                node.Type = declaredType;
             }
 
             var peekTable = _symbolTable.Peek();
@@ -199,7 +203,7 @@ namespace TheLang.Semantics.TypeChecking
                 return false;
             }
 
-            node.Type = declaredType;
+            node.Type = declaredType.Children.First();
 
             var peekTable = _symbolTable.Peek();
             if (peekTable.ContainsKey(node.Name))
@@ -237,6 +241,8 @@ namespace TheLang.Semantics.TypeChecking
 
             switch (node.Type.Id)
             {
+                case TypeId.UNumber:
+                case TypeId.Number:
                 case TypeId.Integer:
                 case TypeId.UInteger:
                 case TypeId.Float:
@@ -259,17 +265,14 @@ namespace TheLang.Semantics.TypeChecking
             var leftType = node.Left.Type;
             var rightType = node.Right.Type;
 
-            if (rightType.IsImplicitlyConvertibleTo(leftType))
-                node.Type = rightType;
-            else if (rightType.IsImplicitlyConvertibleTo(leftType))
-                node.Type = leftType;
-            else
+            if (!rightType.IsImplicitlyConvertibleTo(leftType) || !leftType.IsImplicitlyConvertibleTo(rightType))
             {
                 _compiler.ReportError(node.Position,
                     $"Cannot apply ?? to {leftType} and {rightType}.");
                 return false;
             }
 
+            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Bool));
             return true;
         }
 
@@ -282,11 +285,12 @@ namespace TheLang.Semantics.TypeChecking
 
             var leftType = node.Left.Type;
             var rightType = node.Right.Type;
+            TypeInfo compare;
 
             if (leftType.IsImplicitlyConvertibleTo(rightType))
-                node.Type = rightType;
+                compare = rightType;
             else if (rightType.IsImplicitlyConvertibleTo(leftType))
-                node.Type = leftType;
+                compare = leftType;
             else
             {
                 _compiler.ReportError(node.Position,
@@ -294,11 +298,14 @@ namespace TheLang.Semantics.TypeChecking
                 return false;
             }
 
-            switch (node.Type.Id)
+            switch (compare.Id)
             {
+                case TypeId.UNumber:
+                case TypeId.Number:
                 case TypeId.Integer:
                 case TypeId.UInteger:
                 case TypeId.Float:
+                    node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Bool));
                     return true;
 
                 default:
@@ -384,7 +391,22 @@ namespace TheLang.Semantics.TypeChecking
 
         protected override bool Visit(As node)
         {
-            throw new NotImplementedException();
+            if (!Visit(node.Left))
+                return false;
+            if (!Visit(node.Right))
+                return false;
+
+            var type = node.Right.Type;
+            if (type.Id != TypeId.Type)
+            {
+                // TODO: Error
+                _compiler.ReportError(node.Position, $"");
+                return false;
+            }
+
+            // TODO: Maybe check if we can even typecast to the type?
+            node.Type = type.Children.First();
+            return true;
         }
 
         protected override bool Visit(Divide node)
@@ -501,17 +523,21 @@ namespace TheLang.Semantics.TypeChecking
 
             var childType = node.Child.Type;
 
-            if (childType.Id != TypeId.Integer &&
-                childType.Id != TypeId.UInteger &&
-                childType.Id != TypeId.Float)
+            switch (childType.Id)
             {
-                // TODO: Error
-                _compiler.ReportError(node.Position, $"");
-                return false;
+                case TypeId.Float:
+                case TypeId.Number:
+                case TypeId.Integer:
+                    node.Type = childType;
+                    return true;
+                case TypeId.UNumber:
+                    node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Number));
+                    return true;
+                default:
+                    // TODO: Error
+                    _compiler.ReportError(node.Position, $"");
+                    return false;
             }
-
-            node.Type = childType;
-            return true;
         }
 
         protected override bool Visit(Not node)

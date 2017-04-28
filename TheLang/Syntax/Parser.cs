@@ -1,16 +1,11 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Security.AccessControl;
-using System.Xml.Xsl.Runtime;
 using TheLang.AST;
 using TheLang.AST.Bases;
 using TheLang.AST.Expressions;
 using TheLang.AST.Expressions.Literals;
-using TheLang.AST.Expressions.Operators;
 using TheLang.AST.Expressions.Operators.Binary;
 using TheLang.AST.Expressions.Operators.Unary;
 using TheLang.AST.Statments;
@@ -22,6 +17,8 @@ namespace TheLang.Syntax
         public static readonly Dictionary<Type, OpInfo> OperatorInfo =
             new Dictionary<Type, OpInfo>
         {
+            { typeof(Parentheses), new OpInfo(int.MinValue, Associativity.LeftToRight) },
+
             { typeof(Dot), new OpInfo(0, Associativity.LeftToRight) },
 
             { typeof(Call), new OpInfo(1, Associativity.LeftToRight) },
@@ -183,7 +180,7 @@ namespace TheLang.Syntax
             // TODO: This is close, but no quite correct
             while (EatToken(IsBinaryOperator))
             {
-                var op = (BinaryNode)MakeOperator(EatenToken);
+                var op = MakeBinaryOperator(EatenToken);
 
                 var right = ParseUnary();
                 if (right == null)
@@ -284,7 +281,7 @@ namespace TheLang.Syntax
 
                 if (EatToken(IsUnaryOperator))
                 {
-                    unaryChild = (UnaryNode)MakeOperator(EatenToken);
+                    unaryChild = MakeUnaryOperator(EatenToken);
                 }
                 else if (EatToken(TokenKind.SquareLeft))
                 {
@@ -292,7 +289,7 @@ namespace TheLang.Syntax
 
                     if (EatToken(TokenKind.SquareRight))
                     {
-                        unaryChild = new ArrayPostfix(first.Position);
+                        unaryChild = new ArrayPostfix(first.Position) { Size = new Infer() };
                     }
                     else
                     {
@@ -308,7 +305,7 @@ namespace TheLang.Syntax
                             return null;
                         }
 
-                        unaryChild = new ArrayPostfix(first.Position) {Size = expr};
+                        unaryChild = new ArrayPostfix(first.Position) { Size = expr };
                     }
                 }
             } while (unaryChild != null);
@@ -640,20 +637,12 @@ namespace TheLang.Syntax
             return new CodeBlock(start.Position) { Statements = statements };
         }
 
-        private static Node MakeOperator(Token token)
+        private static BinaryNode MakeBinaryOperator(Token token)
         {
             var kind = token.Kind;
             var pos = token.Position;
             switch (kind)
             {
-                case TokenKind.ExclamationMark:
-                    return new Not(pos);
-                case TokenKind.At:
-                    return new Reference(pos);
-                case TokenKind.UAt:
-                    return new UniqueReference(pos);
-                case TokenKind.Tilde:
-                    return new Dereference(pos);
                 case TokenKind.Plus:
                     return new Add(pos);
                 case TokenKind.Minus:
@@ -684,6 +673,29 @@ namespace TheLang.Syntax
                     return new As(pos);
                 case TokenKind.Dot:
                     return new Dot(pos);
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(kind), kind, null);
+            }
+        }
+
+        private static UnaryNode MakeUnaryOperator(Token token)
+        {
+            var kind = token.Kind;
+            var pos = token.Position;
+            switch (kind)
+            {
+                case TokenKind.ExclamationMark:
+                    return new Not(pos);
+                case TokenKind.At:
+                    return new Reference(pos);
+                case TokenKind.UAt:
+                    return new UniqueReference(pos);
+                case TokenKind.Tilde:
+                    return new Dereference(pos);
+                case TokenKind.Plus:
+                    return new Positive(pos);
+                case TokenKind.Minus:
+                    return new Negative(pos);
                 default:
                     throw new ArgumentOutOfRangeException(nameof(kind), kind, null);
             }
