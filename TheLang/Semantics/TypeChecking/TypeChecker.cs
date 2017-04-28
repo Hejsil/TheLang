@@ -36,9 +36,8 @@ namespace TheLang.Semantics.TypeChecking
             var childType = node.Child.Type;
             if (!childType.IsImplicitlyConvertibleTo(returnType))
             {
-                // TODO: Error
                 _compiler.ReportError(node.Child.Position,
-                    $"");
+                    $"Cannot return value of type {childType}. Procedure returns {returnType}.");
                 return false;
             }
 
@@ -142,6 +141,7 @@ namespace TheLang.Semantics.TypeChecking
                 return false;
 
             var declaredType = node.DeclaredType.Type;
+
             // If declarations type is null, then the type needs to be infered
             if (declaredType == null)
             {
@@ -199,7 +199,7 @@ namespace TheLang.Semantics.TypeChecking
             if (declaredType.Id != TypeId.Type)
             {
                 _compiler.ReportError(node.DeclaredType.Position,
-                    $"A variable can only be declared a Type, and not {node.DeclaredType.Type}.");
+                    $"A variable can only be declared a Type, and not {declaredType}.");
                 return false;
             }
 
@@ -209,7 +209,7 @@ namespace TheLang.Semantics.TypeChecking
             if (peekTable.ContainsKey(node.Name))
             {
                 _compiler.ReportError(node.Position,
-                    $"Variable have already been declared in this scope.");
+                    "Variable have already been declared in this scope.");
                 return false;
             }
 
@@ -363,7 +363,7 @@ namespace TheLang.Semantics.TypeChecking
             }
 
             // TODO: Figure out a dependency system, where the compiler returns to this point after the symbol have been resolved
-            _compiler.ReportError(node.Position, $"");
+            _compiler.ReportError(node.Position, $"{node.Name} is not declared");
             return false;
         }
 
@@ -373,6 +373,8 @@ namespace TheLang.Semantics.TypeChecking
                 return false;
             if (!VisitCollection(node.Values))
                 return false;
+
+
 
             // TODO: Implement
             _compiler.ReportError(node.Position, $"Not Implemented");
@@ -400,7 +402,7 @@ namespace TheLang.Semantics.TypeChecking
             if (type.Id != TypeId.Type)
             {
                 // TODO: Error
-                _compiler.ReportError(node.Position, $"");
+                _compiler.ReportError(node.Position, $"Right side of the as operator must be a type, but was {type}");
                 return false;
             }
 
@@ -507,8 +509,7 @@ namespace TheLang.Semantics.TypeChecking
             var childType = node.Child.Type;
             if (childType.Id != TypeId.Pointer && childType.Id != TypeId.UniquePointer)
             {
-                // TODO: Error
-                _compiler.ReportError(node.Position, $"");
+                _compiler.ReportError(node.Position, $"Cannot dereference {childType}.");
                 return false;
             }
 
@@ -534,8 +535,7 @@ namespace TheLang.Semantics.TypeChecking
                     node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Number));
                     return true;
                 default:
-                    // TODO: Error
-                    _compiler.ReportError(node.Position, $"");
+                    _compiler.ReportError(node.Position, $"Cannot take the negative value of {childType}.");
                     return false;
             }
         }
@@ -548,8 +548,7 @@ namespace TheLang.Semantics.TypeChecking
             var childType = node.Child.Type;
             if (childType.Id != TypeId.Bool)
             {
-                // TODO: Error
-                _compiler.ReportError(node.Position, $"");
+                _compiler.ReportError(node.Position, $"Cannot negate {childType}.");
                 return false;
             }
 
@@ -564,13 +563,17 @@ namespace TheLang.Semantics.TypeChecking
 
             var childType = node.Child.Type;
 
-            if (childType.Id != TypeId.Integer &&
-                childType.Id != TypeId.UInteger &&
-                childType.Id != TypeId.Float)
+            switch (childType.Id)
             {
-                // TODO: Error
-                _compiler.ReportError(node.Position, $"");
-                return false;
+                case TypeId.Float:
+                case TypeId.Number:
+                case TypeId.UNumber:
+                case TypeId.Integer:
+                case TypeId.UInteger:
+                    break;
+                default:
+                    _compiler.ReportError(node.Position, $"Cannot apply unary + on {childType}.");
+                    return false;
             }
 
             node.Type = childType;
@@ -590,28 +593,21 @@ namespace TheLang.Semantics.TypeChecking
         {
             if (!Visit(node.Child))
                 return false;
-            if (!VisitCollection(node.Arguments))
+            if (!Visit(node.Argument))
                 return false;
 
             var childType = node.Child.Type;
             if (childType.Id != TypeId.Array || childType.Id != TypeId.String)
             {
-                // TODO: Error
-                _compiler.ReportError(node.Position, $"");
+                _compiler.ReportError(node.Position, $"Cannot index {childType}.");
                 return false;
             }
 
-            if (childType.Id == TypeId.Array || childType.Size != node.Arguments.Count())
+            var argumentType = node.Argument.Type;
+            if (argumentType.Id != TypeId.Integer && argumentType.Id != TypeId.UInteger)
             {
                 // TODO: Error
-                _compiler.ReportError(node.Position, $"");
-                return false;
-            }
-
-            if (!node.Arguments.All(arg => arg.Type.Id == TypeId.Integer || arg.Type.Id == TypeId.UInteger))
-            {
-                // TODO: Error
-                _compiler.ReportError(node.Position, $"");
+                _compiler.ReportError(node.Position, $"Indexing does not take {argumentType} as an argument.");
                 return false;
             }
 

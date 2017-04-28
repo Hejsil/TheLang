@@ -65,15 +65,15 @@ namespace TheLang.Semantics
 
         protected bool VisitCollection<T>(IEnumerable<T> nodes) where T : Node
         {
-            var hasFailed = false;
+            var succes = true;
 
             foreach (var node in nodes)
             {
                 if (!Visit(node))
-                    hasFailed = true;
+                    succes = false;
             }
 
-            return hasFailed;
+            return succes;
         }
     }
 }

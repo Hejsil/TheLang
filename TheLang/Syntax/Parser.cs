@@ -144,11 +144,13 @@ namespace TheLang.Syntax
 
             if (EatToken(t => t.Kind == TokenKind.Colon || t.Kind == TokenKind.Equal))
             {
+                var colonOrEqual = EatenToken;
+
                 var expression = ParseExpression();
                 if (expression == null)
                     return null;
 
-                return new Variable(EatenToken.Position, EatenToken.Kind == TokenKind.Colon)
+                return new Variable(identifier.Position, colonOrEqual.Kind == TokenKind.Colon)
                 {
                     DeclaredType = type,
                     Name = identifier.Value,
@@ -320,7 +322,7 @@ namespace TheLang.Syntax
             {
                 if (EatToken(TokenKind.CurlyLeft))
                 {
-                    var assignments = new List<Node>();
+                    var expressions = new List<Node>();
 
                     if (!EatToken(TokenKind.CurlyRight))
                     {
@@ -330,7 +332,7 @@ namespace TheLang.Syntax
                             if (right == null)
                                 return null;
 
-                            assignments.Add(right);
+                            expressions.Add(right);
                         }
                         while (!EatToken(TokenKind.Comma));
 
@@ -344,11 +346,11 @@ namespace TheLang.Syntax
                         }
                     }
 
-                    leaf = new TypeLiteral(leaf.Position) { Child = leaf, Values = assignments };
+                    leaf = new TypeLiteral(leaf.Position) { Child = leaf, Values = expressions };
                     continue;
                 }
 
-                if (EatToken(t => t == TokenKind.ParenthesesLeft || t == TokenKind.SquareLeft))
+                if (EatToken(TokenKind.ParenthesesLeft))
                 {
                     var start = EatenToken;
 
@@ -358,9 +360,8 @@ namespace TheLang.Syntax
                         if (arguments.Count != 0 && !EatToken(TokenKind.Comma))
                         {
                             var peek = PeekToken();
-                            var name = start.Kind == TokenKind.ParenthesesLeft ? "procedure call" : "indexing";
                             _compiler.ReportError(peek.Position,
-                                $"Found an unexpected token when parsing a {name}'s arguments. Expected {TokenKind.Comma}, but got {peek.Kind}.");
+                                $"Found an unexpected token when parsing a procedure call's arguments. Expected {TokenKind.Comma}, but got {peek.Kind}.");
                             return null;
                         }
 
@@ -371,10 +372,24 @@ namespace TheLang.Syntax
                         arguments.Add(argument);
                     }
 
-                    if (start.Kind == TokenKind.ParenthesesLeft)
-                        leaf = new Call(leaf.Position) { Child = leaf, Arguments = arguments };
-                    else
-                        leaf = new Indexing(leaf.Position) { Child = leaf, Arguments = arguments };
+                    leaf = new Call(leaf.Position) { Child = leaf, Arguments = arguments };
+                    continue;
+                }
+
+                if (EatToken(TokenKind.SquareLeft))
+                {
+                    var argument = ParseExpression();
+                    if (argument == null)
+                        return null;
+
+                    if (!EatToken(TokenKind.SquareRight))
+                    {
+                        var peek = PeekToken();
+                        _compiler.ReportError(peek.Position, $"Did not find the end of the indexing.");
+                        return null;
+                    }
+
+                    leaf = new Indexing(leaf.Position) { Child = leaf, Argument = argument };
                     continue;
                 }
 

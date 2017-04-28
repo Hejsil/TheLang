@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using TheLang.AST.Bases;
+﻿using TheLang.AST.Bases;
 using TheLang.Syntax;
 
 namespace TheLang.AST.Expressions.Operators.Unary
@@ -10,6 +9,6 @@ namespace TheLang.AST.Expressions.Operators.Unary
             : base(position)
         { }
 
-        public IEnumerable<Node> Arguments { get; set; }
+        public Node Argument { get; set; }
     }
 }
