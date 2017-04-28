@@ -77,5 +77,16 @@ namespace TheLang.Tests
 
             Assert.AreEqual(topType, first.Type.Id);
         }
+
+        [TestCase("i1 := 1 ptr: @Int = @i1")]
+        public void ShouldPass(string proc)
+        {
+            var compiler = new Compiler();
+
+            using (var str = new StringReader(proc))
+                Assert.True(compiler.ParseProgram(str));
+
+            Assert.True(compiler.TypeCheck());
+        }
     }
 }
