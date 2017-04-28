@@ -4,9 +4,9 @@ using TheLang.Syntax;
 
 namespace TheLang.AST.Expressions.Literals
 {
-    public class ProcedureTypeNode : Node
+    public class ProcedureType : Node
     {
-        public ProcedureTypeNode(Position position, bool isFunction)
+        public ProcedureType(Position position, bool isFunction)
             : base(position)
         {
             IsFunction = isFunction;

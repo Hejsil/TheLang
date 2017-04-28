@@ -1,18 +1,60 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Security.AccessControl;
+using System.Xml.Xsl.Runtime;
 using TheLang.AST;
 using TheLang.AST.Bases;
 using TheLang.AST.Expressions;
 using TheLang.AST.Expressions.Literals;
 using TheLang.AST.Expressions.Operators;
+using TheLang.AST.Expressions.Operators.Binary;
+using TheLang.AST.Expressions.Operators.Unary;
 using TheLang.AST.Statments;
 
 namespace TheLang.Syntax
 {
     public class Parser : Scanner
     {
+        public static readonly Dictionary<Type, OpInfo> OperatorInfo =
+            new Dictionary<Type, OpInfo>
+        {
+            { typeof(Dot), new OpInfo(0, Associativity.LeftToRight) },
+
+            { typeof(Call), new OpInfo(1, Associativity.LeftToRight) },
+            { typeof(Indexing), new OpInfo(1, Associativity.LeftToRight) },
+
+            { typeof(Reference), new OpInfo(2, Associativity.RightToLeft) },
+            { typeof(UniqueReference), new OpInfo(2, Associativity.RightToLeft) },
+            { typeof(Dereference), new OpInfo(2, Associativity.RightToLeft) },
+            { typeof(Negative), new OpInfo(2, Associativity.RightToLeft) },
+            { typeof(Positive), new OpInfo(2, Associativity.RightToLeft) },
+            { typeof(Not), new OpInfo(2, Associativity.RightToLeft) },
+
+            { typeof(As), new OpInfo(3, Associativity.LeftToRight) },
+
+            { typeof(Times), new OpInfo(4, Associativity.LeftToRight) },
+            { typeof(Divide), new OpInfo(4, Associativity.LeftToRight) },
+            { typeof(Modulo), new OpInfo(4, Associativity.LeftToRight) },
+
+            { typeof(Add), new OpInfo(5, Associativity.LeftToRight) },
+            { typeof(Sub), new OpInfo(5, Associativity.LeftToRight) },
+
+            { typeof(LessThan), new OpInfo(6, Associativity.LeftToRight) },
+            { typeof(LessThanEqual), new OpInfo(6, Associativity.LeftToRight) },
+            { typeof(GreaterThan), new OpInfo(6, Associativity.LeftToRight) },
+            { typeof(GreaterThanEqual), new OpInfo(6, Associativity.LeftToRight) },
+
+            { typeof(Equal), new OpInfo(7, Associativity.LeftToRight) },
+            { typeof(NotEqual), new OpInfo(7, Associativity.LeftToRight) },
+
+            { typeof(And), new OpInfo(8, Associativity.LeftToRight) },
+            { typeof(Or), new OpInfo(8, Associativity.LeftToRight) },
+        };
+
         private readonly Compiler _compiler;
 
         public Parser(string fileName, Compiler compiler)
@@ -138,38 +180,79 @@ namespace TheLang.Syntax
             if (top == null)
                 return null;
 
+            // TODO: This is close, but no quite correct
             while (EatToken(IsBinaryOperator))
             {
-                var op = new BinaryOperator(EatenToken.Position, (BinaryOperatorKind)EatenToken.Kind);
+                var op = (BinaryNode)MakeOperator(EatenToken);
 
                 var right = ParseUnary();
                 if (right == null)
                     return null;
 
-                op.Left = top;
-                op.Right = right;
-                top = op;
-
-                var b = op.Left as BinaryOperator;
-                // The loop that ensures that the operators upholds their priority.
-                while (b != null)
+                OpInfo opInfo;
+                if (!OperatorInfo.TryGetValue(op.GetType(), out opInfo))
                 {
-                    if (b.Priority < op.Priority)
-                        break;
-                    if (b.Priority == op.Priority && op.Associativity != AssociativityKind.RightToLeft)
-                        break;
-
-                    op.Left = b.Right;
-                    b.Right = op;
-                    b = op.Left as BinaryOperator;
-                }
-
-                if (op.Kind == BinaryOperatorKind.Dot && !(op.Right is Symbol))
-                {
-                    _compiler.ReportError(op.Right.Position, 
-                        "Only an identifier is allowed on the right side of the dot operator.");
+                    // TODO: Better error
+                    _compiler.ReportError(op.Position, $"Internal parser Error");
                     return null;
                 }
+
+                Node prev = null;
+                var current = top;
+                OpInfo currentInfo;
+
+                // The loop that ensures that the operators upholds their priority.
+                while (OperatorInfo.TryGetValue(current.GetType(), out currentInfo) &&
+                       opInfo.Priority <= currentInfo.Priority)
+                {
+                    var unary = current as UnaryNode;
+                    var binary = current as BinaryNode;
+
+                    if (unary != null)
+                    {
+                        if (opInfo.Priority == currentInfo.Priority)
+                            break;
+
+                        prev = current;
+                        current = unary.Child;
+                    }
+                    else if ((opInfo.Priority != currentInfo.Priority ||
+                             opInfo.Associativity == Associativity.RightToLeft) &&
+                             binary != null)
+                    {
+                        prev = current;
+                        current = binary.Right;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                if (op is Dot && !(right is Symbol))
+                {
+                    // TODO: Better error
+                    _compiler.ReportError(right.Position,
+                        "The right side of the dot operator can only by a symbol.");
+                    return null;
+                }
+
+                op.Right = right;
+                op.Left = current;
+
+                {
+                    var unary = prev as UnaryNode;
+                    var binary = prev as BinaryNode;
+
+                    if (unary != null)
+                        unary.Child = op;
+                    else if (binary != null)
+                        binary.Right = op;
+                    else
+                        prev = op;
+                }
+
+                top = prev;
             }
 
             return top;
@@ -201,7 +284,7 @@ namespace TheLang.Syntax
 
                 if (EatToken(IsUnaryOperator))
                 {
-                    unaryChild = new UnaryOperator(EatenToken.Position, (UnaryOperatorKind) EatenToken.Kind);
+                    unaryChild = (UnaryNode)MakeOperator(EatenToken);
                 }
                 else if (EatToken(TokenKind.SquareLeft))
                 {
@@ -391,7 +474,7 @@ namespace TheLang.Syntax
                         };
                     }
 
-                    return new ProcedureTypeNode(start.Position, start.Kind == TokenKind.KeywordFunction)
+                    return new ProcedureType(start.Position, start.Kind == TokenKind.KeywordFunction)
                     {
                         Arguments = new []{ returnType }
                     };
@@ -471,7 +554,7 @@ namespace TheLang.Syntax
                         return null;
 
                     arguments.Add(returnType);
-                    return new ProcedureTypeNode(start.Position, start.Kind == TokenKind.KeywordFunction)
+                    return new ProcedureType(start.Position, start.Kind == TokenKind.KeywordFunction)
                     {
                         Arguments = arguments,
                     };
@@ -557,12 +640,66 @@ namespace TheLang.Syntax
             return new CodeBlock(start.Position) { Statements = statements };
         }
 
-        private static readonly HashSet<BinaryOperatorKind> BinaryOperators = 
-            new HashSet<BinaryOperatorKind>((BinaryOperatorKind[])Enum.GetValues(typeof(BinaryOperatorKind)));
-        private static bool IsBinaryOperator(TokenKind kind) => BinaryOperators.Contains((BinaryOperatorKind)kind);
-        
-        private static readonly HashSet<UnaryOperatorKind> UnaryOperators =
-            new HashSet<UnaryOperatorKind>((UnaryOperatorKind[])Enum.GetValues(typeof(UnaryOperatorKind)));
-        private static bool IsUnaryOperator(TokenKind kind) => UnaryOperators.Contains((UnaryOperatorKind)kind);
+        private static Node MakeOperator(Token token)
+        {
+            var kind = token.Kind;
+            var pos = token.Position;
+            switch (kind)
+            {
+                case TokenKind.ExclamationMark:
+                    return new Not(pos);
+                case TokenKind.At:
+                    return new Reference(pos);
+                case TokenKind.UAt:
+                    return new UniqueReference(pos);
+                case TokenKind.Tilde:
+                    return new Dereference(pos);
+                case TokenKind.Plus:
+                    return new Add(pos);
+                case TokenKind.Minus:
+                    return new Sub(pos);
+                case TokenKind.Times:
+                    return new Times(pos);
+                case TokenKind.Divide:
+                    return new Divide(pos);
+                case TokenKind.EqualEqual:
+                    return new Equal(pos);
+                case TokenKind.Modulo:
+                    return new Modulo(pos);
+                case TokenKind.LessThan:
+                    return new LessThan(pos);
+                case TokenKind.LessThanEqual:
+                    return new LessThanEqual(pos);
+                case TokenKind.GreaterThan:
+                    return new GreaterThan(pos);
+                case TokenKind.GreaterThanEqual:
+                    return new GreaterThanEqual(pos);
+                case TokenKind.ExclamationMarkEqual:
+                    return new NotEqual(pos);
+                case TokenKind.KeywordAnd:
+                    return new And(pos);
+                case TokenKind.KeywordOr:
+                    return new Or(pos);
+                case TokenKind.KeywordAs:
+                    return new As(pos);
+                case TokenKind.Dot:
+                    return new Dot(pos);
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(kind), kind, null);
+            }
+        }
+
+        private static readonly TokenKind[] TokenKinds = (TokenKind[])Enum.GetValues(typeof(TokenKind));
+        private static readonly IEnumerable<TokenKind> BinaryOperators =
+            TokenKinds
+                .SkipWhile(t => t < TokenKind.Plus)
+                .TakeWhile(t => t <= TokenKind.Dot);
+        private static readonly IEnumerable<TokenKind> UnaryOperators =
+            TokenKinds
+                .SkipWhile(t => t < TokenKind.ExclamationMark)
+                .TakeWhile(t => t <= TokenKind.Minus);
+
+        private static bool IsBinaryOperator(TokenKind kind) => BinaryOperators.Contains(kind);
+        private static bool IsUnaryOperator(TokenKind kind) => UnaryOperators.Contains(kind);
     }
 }

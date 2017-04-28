@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using TheLang.AST;
+using TheLang.AST.Bases;
 using TheLang.AST.Expressions;
 using TheLang.AST.Expressions.Literals;
-using TheLang.AST.Expressions.Operators;
+using TheLang.AST.Expressions.Operators.Binary;
+using TheLang.AST.Expressions.Operators.Unary;
 using TheLang.AST.Statments;
 
 namespace TheLang.Semantics.TypeChecking
@@ -85,8 +87,6 @@ namespace TheLang.Semantics.TypeChecking
             node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.String, chr, dataField, lengthField));
             return true;
         }
-
-        protected override bool Visit(NeedsToBeInfered node) => true;
 
         protected override bool Visit(IntegerLiteral node)
         {
@@ -181,6 +181,11 @@ namespace TheLang.Semantics.TypeChecking
 
         protected override bool Visit(Infer node) => true;
 
+        protected override bool Visit(Assign node)
+        {
+            throw new NotImplementedException();
+        }
+
         protected override bool Visit(Declaration node)
         {
             if (!Visit(node.DeclaredType))
@@ -189,7 +194,7 @@ namespace TheLang.Semantics.TypeChecking
             var declaredType = node.DeclaredType.Type;
             if (declaredType.Id != TypeId.Type)
             {
-                _compiler.ReportError(node.DeclaredType.Position, 
+                _compiler.ReportError(node.DeclaredType.Position,
                     $"A variable can only be declared a Type, and not {node.DeclaredType.Type}.");
                 return false;
             }
@@ -199,7 +204,7 @@ namespace TheLang.Semantics.TypeChecking
             var peekTable = _symbolTable.Peek();
             if (peekTable.ContainsKey(node.Name))
             {
-                _compiler.ReportError(node.Position, 
+                _compiler.ReportError(node.Position,
                     $"Variable have already been declared in this scope.");
                 return false;
             }
@@ -208,228 +213,143 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(BinaryOperator node)
+
+        private bool VisitArithmeticOperators(BinaryNode node)
         {
             if (!Visit(node.Left))
                 return false;
-
-            var leftType = node.Left.Type;
-            if (node.Kind == BinaryOperatorKind.Dot)
-            {
-                // The parser should ensure this, so if we crash, the parser made a mistake
-                var name = ((Symbol)node.Right).Name;
-
-                switch (leftType.Id)
-                {
-                    case TypeId.Array:
-                    case TypeId.String:
-                    case TypeId.Struct:
-                        var field = leftType.Children.FirstOrDefault(f => f.Id == TypeId.Field && f.Name == name);
-
-                        if (field == null)
-                        {
-                            _compiler.ReportError(node.Position,
-                                $"{leftType} does not contain the field \"{name}\"");
-                            return false;
-                        }
-
-                        node.Type = field.Children.First();
-                        return true;
-
-                    default:
-                        _compiler.ReportError(node.Position,
-                            $"{node.Left.Type} does not contain the field \"{name}\"");
-                        return false;
-                }
-            }
-
-
             if (!Visit(node.Right))
                 return false;
 
+            var leftType = node.Left.Type;
             var rightType = node.Right.Type;
-            switch (node.Kind)
+
+            if (leftType.IsImplicitlyConvertibleTo(rightType))
+                node.Type = rightType;
+            else if (rightType.IsImplicitlyConvertibleTo(leftType))
+                node.Type = leftType;
+            else
             {
-                case BinaryOperatorKind.As:
-                    _compiler.ReportError(node.Position,
-                        $"To be implemented");
-                    return false;
+                _compiler.ReportError(node.Position,
+                    $"Cannot apply ?? to {leftType} and {rightType}.");
+                return false;
+            }
 
-                case BinaryOperatorKind.PlusAssign:
-                case BinaryOperatorKind.MinusAssign:
-                case BinaryOperatorKind.TimesAssign:
-                case BinaryOperatorKind.DivideAssign:
-                case BinaryOperatorKind.ModulusAssign:
-                {
-                    if (!(node.Left is Symbol) && !(node.Left is BinaryOperator b && b.Kind == BinaryOperatorKind.Dot))
-                    {
-                        _compiler.ReportError(node.Left.Position, "Left side of assignment is not assignable.");
-                        return false;
-                    }
-
-                    if (!rightType.IsImplicitlyConvertibleTo(leftType))
-                    {
-                        _compiler.ReportError(node.Position,
-                            $"{rightType} is not operator assignable to {leftType}.");
-                        return false;
-                    }
-
-                    node.Type = leftType;
+            switch (node.Type.Id)
+            {
+                case TypeId.Integer:
+                case TypeId.UInteger:
+                case TypeId.Float:
                     return true;
-                }
-
-                case BinaryOperatorKind.Times:
-                case BinaryOperatorKind.Divide:
-                case BinaryOperatorKind.Modulo:
-                case BinaryOperatorKind.Plus:
-                case BinaryOperatorKind.Minus:
-                case BinaryOperatorKind.LessThan:
-                case BinaryOperatorKind.LessThanEqual:
-                case BinaryOperatorKind.GreaterThan:
-                case BinaryOperatorKind.GreaterThanEqual:
-                    if (leftType.IsImplicitlyConvertibleTo(rightType))
-                        node.Type = rightType;
-                    else if (rightType.IsImplicitlyConvertibleTo(leftType))
-                        node.Type = leftType;
-                    else
-                    {
-                        _compiler.ReportError(node.Position,
-                            $"Cannot apply {node.Kind} to {leftType} and {rightType}.");
-                        return false;
-                    }
-
-                    switch (node.Type.Id)
-                    {
-                        case TypeId.Integer:
-                        case TypeId.UInteger:
-                        case TypeId.Float:
-                            return true;
-
-                        default:
-                            _compiler.ReportError(node.Position,
-                                $"Cannot apply {node.Kind} to {leftType} and {rightType}.");
-                            return false;
-                    }
-
-                case BinaryOperatorKind.Equal:
-                case BinaryOperatorKind.NotEqual:
-                    if (rightType.IsImplicitlyConvertibleTo(leftType))
-                        node.Type = rightType;
-                    else if (rightType.IsImplicitlyConvertibleTo(leftType))
-                        node.Type = leftType;
-                    else
-                    {
-                        _compiler.ReportError(node.Position,
-                            $"Cannot apply {node.Kind} to {leftType} and {rightType}.");
-                        return false;
-                    }
-
-                    return true;
-
-                case BinaryOperatorKind.And:
-                case BinaryOperatorKind.Or:
-                    if (rightType.IsImplicitlyConvertibleTo(leftType))
-                        node.Type = rightType;
-                    else if (rightType.IsImplicitlyConvertibleTo(leftType))
-                        node.Type = leftType;
-                    else
-                    {
-                        _compiler.ReportError(node.Position,
-                            $"Cannot apply {node.Kind} to {leftType} and {rightType}.");
-                        return false;
-                    }
-
-                    if (node.Type.Id == TypeId.Bool)
-                        return true;
-
-                    _compiler.ReportError(node.Position,
-                        $"Cannot apply boolean operator to {leftType} and {rightType}.");
-                    return false;
-
-                case BinaryOperatorKind.Assign:
-                {
-                    if (!(node.Left is Symbol) && !(node.Left is BinaryOperator b && b.Kind == BinaryOperatorKind.Dot))
-                    {
-                        _compiler.ReportError(node.Left.Position, "Left side of assignment is not assignable.");
-                        return false;
-                    }
-
-                    if (rightType.IsImplicitlyConvertibleTo(leftType))
-                    {
-                        node.Type = leftType;
-                        return true;
-                    }
-
-                    _compiler.ReportError(node.Position,
-                        $"{rightType} is not assignable to {leftType}.");
-                        return false;
-
-                }
 
                 default:
-                    throw new ArgumentOutOfRangeException();
+                    _compiler.ReportError(node.Position,
+                        $"Cannot apply ?? to {leftType} and {rightType}.");
+                    return false;
             }
         }
 
-        protected override bool Visit(UnaryOperator node)
+        private bool VisitEqualityOperators(BinaryNode node)
+        {
+            if (!Visit(node.Left))
+                return false;
+            if (!Visit(node.Right))
+                return false;
+
+            var leftType = node.Left.Type;
+            var rightType = node.Right.Type;
+
+            if (rightType.IsImplicitlyConvertibleTo(leftType))
+                node.Type = rightType;
+            else if (rightType.IsImplicitlyConvertibleTo(leftType))
+                node.Type = leftType;
+            else
+            {
+                _compiler.ReportError(node.Position,
+                    $"Cannot apply ?? to {leftType} and {rightType}.");
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool VisitRelationalOperators(BinaryNode node)
+        {
+            if (!Visit(node.Left))
+                return false;
+            if (!Visit(node.Right))
+                return false;
+
+            var leftType = node.Left.Type;
+            var rightType = node.Right.Type;
+
+            if (leftType.IsImplicitlyConvertibleTo(rightType))
+                node.Type = rightType;
+            else if (rightType.IsImplicitlyConvertibleTo(leftType))
+                node.Type = leftType;
+            else
+            {
+                _compiler.ReportError(node.Position,
+                    $"Cannot apply ?? to {leftType} and {rightType}.");
+                return false;
+            }
+
+            switch (node.Type.Id)
+            {
+                case TypeId.Integer:
+                case TypeId.UInteger:
+                case TypeId.Float:
+                    return true;
+
+                default:
+                    _compiler.ReportError(node.Position,
+                        $"Cannot apply ?? to {leftType} and {rightType}.");
+                    return false;
+            }
+        }
+
+        private bool VisitLogicalOperators(BinaryNode node)
+        {
+            if (!Visit(node.Left))
+                return false;
+            if (!Visit(node.Right))
+                return false;
+
+            var leftType = node.Left.Type;
+            var rightType = node.Right.Type;
+
+            if (rightType.IsImplicitlyConvertibleTo(leftType))
+                node.Type = rightType;
+            else if (rightType.IsImplicitlyConvertibleTo(leftType))
+                node.Type = leftType;
+            else
+            {
+                _compiler.ReportError(node.Position,
+                    $"Cannot apply ?? to {leftType} and {rightType}.");
+                return false;
+            }
+
+            if (node.Type.Id == TypeId.Bool)
+                return true;
+
+            _compiler.ReportError(node.Position,
+                $"Cannot apply boolean operator to {leftType} and {rightType}.");
+            return false;
+        }
+
+        protected override bool Visit(UniqueReference node)
         {
             if (!Visit(node.Child))
                 return false;
 
-            var childType = node.Child.Type;
-            switch (node.Kind)
-            {
-                case UnaryOperatorKind.Negative:
-                case UnaryOperatorKind.Positive:
-                    if (childType.Id != TypeId.Integer &&
-                        childType.Id != TypeId.UInteger &&
-                        childType.Id != TypeId.Float)
-                    {
-                        // TODO: Error
-                        _compiler.ReportError(node.Position, $"");
-                        return false;
-                    }
-
-                    node.Type = childType;
-                    return true;
-
-                case UnaryOperatorKind.Not:
-                    if (childType.Id != TypeId.Bool)
-                    {
-                        // TODO: Error
-                        _compiler.ReportError(node.Position, $"");
-                        return false;
-                    }
-
-                    node.Type = childType;
-                    return true;
-
-                case UnaryOperatorKind.Reference:
-                    node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Pointer, childType));
-                    return true;
-
-                case UnaryOperatorKind.UniqueReference:
-                    node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.UniquePointer, childType));
-                    return true;
-
-                case UnaryOperatorKind.Dereference:
-                    if (childType.Id != TypeId.Pointer && childType.Id != TypeId.UniquePointer)
-                    {
-                        // TODO: Error
-                        _compiler.ReportError(node.Position, $"");
-                        return false;
-                    }
-
-                    node.Type = childType.Children.First();
-                    return true;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
+            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.UniquePointer, node.Child.Type));
+            return true;
         }
 
         protected override bool Visit(Symbol node)
         {
-            if (TryFindSymbolTypeInfo(node.Name, out var result))
+            TypeInfo result;
+            if (TryFindSymbolTypeInfo(node.Name, out result))
             {
                 node.Type = result;
                 return true;
@@ -452,6 +372,97 @@ namespace TheLang.Semantics.TypeChecking
             return false;
         }
 
+        protected override bool Visit(Add node)
+        {
+            return VisitArithmeticOperators(node);
+        }
+
+        protected override bool Visit(And node)
+        {
+            return VisitLogicalOperators(node);
+        }
+
+        protected override bool Visit(As node)
+        {
+            throw new NotImplementedException();
+        }
+
+        protected override bool Visit(Divide node)
+        {
+            return VisitArithmeticOperators(node);
+        }
+
+        protected override bool Visit(Dot node)
+        {
+            if (!Visit(node.Left))
+                return false;
+
+            var leftType = node.Left.Type;
+
+            var name = node.Right.Name;
+            var field = leftType.Children.FirstOrDefault(f => f.Id == TypeId.Field && f.Name == name);
+
+            if (field == null)
+            {
+                _compiler.ReportError(node.Position,
+                    $"{leftType} does not contain the field \"{name}\"");
+                return false;
+            }
+
+            node.Type = field.Children.First();
+            return true;
+        }
+
+        protected override bool Visit(Equal node)
+        {
+            return VisitEqualityOperators(node);
+        }
+
+        protected override bool Visit(GreaterThan node)
+        {
+            return VisitRelationalOperators(node);
+        }
+
+        protected override bool Visit(GreaterThanEqual node)
+        {
+            return VisitRelationalOperators(node);
+        }
+
+        protected override bool Visit(LessThan node)
+        {
+            return VisitRelationalOperators(node);
+        }
+
+        protected override bool Visit(LessThanEqual node)
+        {
+            return VisitRelationalOperators(node);
+        }
+
+        protected override bool Visit(Modulo node)
+        {
+            return VisitArithmeticOperators(node);
+        }
+
+        protected override bool Visit(NotEqual node)
+        {
+            return VisitEqualityOperators(node);
+        }
+
+        protected override bool Visit(Or node)
+        {
+            return VisitLogicalOperators(node);
+        }
+
+        protected override bool Visit(Sub node)
+        {
+            return VisitArithmeticOperators(node);
+        }
+
+        protected override bool Visit(Times node)
+        {
+            return VisitArithmeticOperators(node);
+        }
+
         protected override bool Visit(StructType node)
         {
             if (!VisitCollection(node.Fields))
@@ -463,6 +474,89 @@ namespace TheLang.Semantics.TypeChecking
 
             var composit = GetTypeInfo(new TypeInfoStruct(TypeId.Struct, children: fields));
             node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Type, composit));
+            return true;
+        }
+
+        protected override bool Visit(Dereference node)
+        {
+            if (!Visit(node.Child))
+                return false;
+
+            var childType = node.Child.Type;
+            if (childType.Id != TypeId.Pointer && childType.Id != TypeId.UniquePointer)
+            {
+                // TODO: Error
+                _compiler.ReportError(node.Position, $"");
+                return false;
+            }
+
+            node.Type = childType.Children.First();
+            return true;
+        }
+
+        protected override bool Visit(Negative node)
+        {
+            if (!Visit(node.Child))
+                return false;
+
+            var childType = node.Child.Type;
+
+            if (childType.Id != TypeId.Integer &&
+                childType.Id != TypeId.UInteger &&
+                childType.Id != TypeId.Float)
+            {
+                // TODO: Error
+                _compiler.ReportError(node.Position, $"");
+                return false;
+            }
+
+            node.Type = childType;
+            return true;
+        }
+
+        protected override bool Visit(Not node)
+        {
+            if (!Visit(node.Child))
+                return false;
+
+            var childType = node.Child.Type;
+            if (childType.Id != TypeId.Bool)
+            {
+                // TODO: Error
+                _compiler.ReportError(node.Position, $"");
+                return false;
+            }
+
+            node.Type = childType;
+            return true;
+        }
+
+        protected override bool Visit(Positive node)
+        {
+            if (!Visit(node.Child))
+                return false;
+
+            var childType = node.Child.Type;
+
+            if (childType.Id != TypeId.Integer &&
+                childType.Id != TypeId.UInteger &&
+                childType.Id != TypeId.Float)
+            {
+                // TODO: Error
+                _compiler.ReportError(node.Position, $"");
+                return false;
+            }
+
+            node.Type = childType;
+            return true;
+        }
+
+        protected override bool Visit(Reference node)
+        {
+            if (!Visit(node.Child))
+                return false;
+
+            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Pointer, node.Child.Type));
             return true;
         }
 
@@ -524,11 +618,14 @@ namespace TheLang.Semantics.TypeChecking
                 return false;
             }
 
-            var zip = node.Arguments.Zip(childType.Children, (n, t) => (n, t));
+            var zip = node.Arguments.Zip(childType.Children, Tuple.Create);
 
             var index = 1;
-            foreach (var (argument, expectedType) in zip)
+            foreach (var tuple in zip)
             {
+                var argument = tuple.Item1;
+                var expectedType = tuple.Item2;
+
                 var actualType = argument.Type;
 
                 if (!actualType.IsImplicitlyConvertibleTo(expectedType))
@@ -545,7 +642,7 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(ProcedureTypeNode node)
+        protected override bool Visit(ProcedureType node)
         {
             if (!VisitCollection(node.Arguments))
                 return false;
@@ -557,7 +654,8 @@ namespace TheLang.Semantics.TypeChecking
 
         private TypeInfo GetTypeInfo(TypeInfoStruct typeInfo)
         {
-            if (_existingTypes.TryGetValue(typeInfo, out var result))
+            TypeInfo result;
+            if (_existingTypes.TryGetValue(typeInfo, out result))
                 return result;
 
             var instance = typeInfo.Allocate();

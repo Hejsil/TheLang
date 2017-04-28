@@ -1,7 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
-using OBeautifulCode.Math;
-using TheLang.AST.Expressions.Literals;
+using HashCalculator;
 
 namespace TheLang.Semantics.TypeChecking
 {
@@ -42,7 +41,6 @@ namespace TheLang.Semantics.TypeChecking
 
         public TypeInfo Allocate() => new TypeInfo(this);
 
-        public static IEqualityComparer<TypeInfoStruct> Comparer { get; } = new TypeInfoStructEqualityComparer();
         private sealed class TypeInfoStructEqualityComparer : IEqualityComparer<TypeInfoStruct>
         {
             public bool Equals(TypeInfoStruct x, TypeInfoStruct y)
@@ -50,17 +48,23 @@ namespace TheLang.Semantics.TypeChecking
                 return x.Id == y.Id &&
                        x.Size == y.Size &&
                        string.Equals(x.Name, y.Name) &&
-                       x.Children.SequenceEqual(y.Children);
+                       Enumerable.SequenceEqual(x.Children, y.Children);
             }
 
             public int GetHashCode(TypeInfoStruct obj)
             {
-                return HashCodeHelper.Initialize()
-                    .Hash(obj.Id)
-                    .Hash(obj.Name)
-                    .HashElements(obj.Children)
-                    .Value;
+                unchecked
+                {
+                    var hashCode = (int) obj.Id;
+                    hashCode = (hashCode * 397) ^ obj.Size;
+                    hashCode = (hashCode * 397) ^ (obj.Name != null ? obj.Name.GetHashCode() : 0);
+                    hashCode = (hashCode * 397) ^ (obj.Children != null ? obj.Children.CalculateHash() : 0);
+                    return hashCode;
+                }
             }
         }
+
+        public static IEqualityComparer<TypeInfoStruct> Comparer { get; } = new TypeInfoStructEqualityComparer();
+
     }
 }

@@ -1,43 +1,38 @@
 ﻿using System.IO;
 using System.Linq;
 using NUnit.Framework;
+using NUnit.Framework.Constraints;
+using TheLang.AST.Bases;
 using TheLang.AST.Expressions.Operators;
+using TheLang.AST.Expressions.Operators.Binary;
 using TheLang.AST.Statments;
+using TheLang.Syntax;
 
 namespace TheLang.Tests
 {
     [TestFixture]
     public class ParserTest
     {
-        [TestCase("t1.t2.t3", AssociativityKind.RightToLeft)]
+        [TestCase("t1 as t2 as t3", Associativity.LeftToRight)]
 
-        [TestCase("t1 as t2 as t3", AssociativityKind.LeftToRight)]
+        [TestCase("t1 * t2 * t3", Associativity.LeftToRight)]
+        [TestCase("t1 / t2 / t3", Associativity.LeftToRight)]
+        [TestCase("t1 % t2 % t3", Associativity.LeftToRight)]
 
-        [TestCase("t1 * t2 * t3", AssociativityKind.LeftToRight)]
-        [TestCase("t1 / t2 / t3", AssociativityKind.LeftToRight)]
-        [TestCase("t1 % t2 % t3", AssociativityKind.LeftToRight)]
-
-        [TestCase("t1 + t2 + t3", AssociativityKind.LeftToRight)]
-        [TestCase("t1 - t2 - t3", AssociativityKind.LeftToRight)]
+        [TestCase("t1 + t2 + t3", Associativity.LeftToRight)]
+        [TestCase("t1 - t2 - t3", Associativity.LeftToRight)]
         
-        [TestCase("t1 < t2 < t3", AssociativityKind.LeftToRight)]
-        [TestCase("t1 <= t2 <= t3", AssociativityKind.LeftToRight)]
-        [TestCase("t1 > t2 > t3", AssociativityKind.LeftToRight)]
-        [TestCase("t1 >= t2 >= t3", AssociativityKind.LeftToRight)]
+        [TestCase("t1 < t2 < t3", Associativity.LeftToRight)]
+        [TestCase("t1 <= t2 <= t3", Associativity.LeftToRight)]
+        [TestCase("t1 > t2 > t3", Associativity.LeftToRight)]
+        [TestCase("t1 >= t2 >= t3", Associativity.LeftToRight)]
 
-        [TestCase("t1 == t2 == t3", AssociativityKind.LeftToRight)]
-        [TestCase("t1 != t2 != t3", AssociativityKind.LeftToRight)]
+        [TestCase("t1 == t2 == t3", Associativity.LeftToRight)]
+        [TestCase("t1 != t2 != t3", Associativity.LeftToRight)]
 
-        [TestCase("t1 and t2 and t3", AssociativityKind.LeftToRight)]
-        [TestCase("t1 or t2 or t3", AssociativityKind.LeftToRight)]
-
-        [TestCase("t1 = t2 = t3", AssociativityKind.RightToLeft)]
-        [TestCase("t1 += t2 += t3", AssociativityKind.RightToLeft)]
-        [TestCase("t1 -= t2 -= t3", AssociativityKind.RightToLeft)]
-        [TestCase("t1 *= t2 *= t3", AssociativityKind.RightToLeft)]
-        [TestCase("t1 /= t2 /= t3", AssociativityKind.RightToLeft)]
-        [TestCase("t1 %= t2 %= t3", AssociativityKind.RightToLeft)]
-        public void Assosiativity(string expression, AssociativityKind associativity)
+        [TestCase("t1 and t2 and t3", Associativity.LeftToRight)]
+        [TestCase("t1 or t2 or t3", Associativity.LeftToRight)]
+        public void Assosiativity(string expression, Associativity associativity)
         {
             var compiler = new Compiler();
 
@@ -47,10 +42,10 @@ namespace TheLang.Tests
             var variable = compiler.Tree.Files.First().Declarations.First() as Variable;
             Assert.NotNull(variable);
 
-            var op = variable.Value as BinaryOperator;
+            var op = variable.Value as BinaryNode;
             Assert.NotNull(op);
 
-            Assert.IsNotInstanceOf<BinaryOperator>(associativity == AssociativityKind.LeftToRight ? op.Right : op.Left);
+            Assert.IsNotInstanceOf<BinaryNode>(associativity == Associativity.LeftToRight ? op.Right : op.Left);
         }
 
         
@@ -79,29 +74,54 @@ namespace TheLang.Tests
             var variable = compiler.Tree.Files.First().Declarations.First() as Variable;
             Assert.NotNull(variable);
 
-            var op = variable.Value as BinaryOperator;
-            Assert.NotNull(op);
-
-            TestThatChildrenUpholdPriority(op);
+            TestThatChildrenUpholdPriority(variable.Value);
         }
 
-        private void TestThatChildrenUpholdPriority(BinaryOperator binary)
+        private void TestThatChildrenUpholdPriority(Node node)
         {
-            var left = binary.Left as BinaryOperator;
-            var right = binary.Right as BinaryOperator;
-            if (left != null)
+            OpInfo info;
+            Assert.True(Parser.OperatorInfo.TryGetValue(node.GetType(), out info));
+
+            var binary = node as BinaryNode;
+            var unary = node as UnaryNode;
+            var dot = node as Dot;
+
+            if (binary != null)
             {
-                Assert.LessOrEqual(left.Priority, binary.Priority, binary.Kind.ToString());
-                TestThatChildrenUpholdPriority(left);
+                OpInfo left, right;
+                if (Parser.OperatorInfo.TryGetValue(binary.Left.GetType(), out left))
+                {
+                    Assert.GreaterOrEqual(info.Priority, left.Priority);
+                    TestThatChildrenUpholdPriority(binary.Left);
+                }
+                if (Parser.OperatorInfo.TryGetValue(binary.Right.GetType(), out right))
+                {
+                    Assert.GreaterOrEqual(info.Priority, right.Priority);
+                    TestThatChildrenUpholdPriority(binary.Right);
+                }
+            }
+            else if (unary != null)
+            {
+                OpInfo child;
+                if (Parser.OperatorInfo.TryGetValue(unary.Child.GetType(), out child))
+                {
+                    Assert.GreaterOrEqual(info.Priority, child.Priority);
+                    TestThatChildrenUpholdPriority(unary.Child);
+                }
+            }
+            else if (dot != null)
+            {
+
+                OpInfo left;
+                if (Parser.OperatorInfo.TryGetValue(dot.Left.GetType(), out left))
+                {
+                    Assert.GreaterOrEqual(info.Priority, left.Priority);
+                    TestThatChildrenUpholdPriority(dot.Left);
+                }
             }
 
-            if (right != null)
-            {
-                Assert.LessOrEqual(right.Priority, binary.Priority, binary.Kind.ToString());
-                TestThatChildrenUpholdPriority(right);
-            }
         }
-        
+
 
         [TestCase("const :: func() Nothing => { }")]
         [TestCase("const :: proc() Nothing => { }")]

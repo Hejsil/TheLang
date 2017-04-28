@@ -1,9 +1,8 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using TheLang.AST.Bases;
 using TheLang.Syntax;
 
-namespace TheLang.AST.Expressions.Operators
+namespace TheLang.AST.Expressions.Operators.Unary
 {
     public class Indexing : UnaryNode
     {
