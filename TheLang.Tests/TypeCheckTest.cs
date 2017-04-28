@@ -22,12 +22,11 @@ namespace TheLang.Tests
         [TestCase("const :: 1.0 as UInt", TypeId.UInteger)]
         [TestCase("const :: 1.0 as Float", TypeId.Float)]
 
-        [TestCase("cost :: 1 * 1", TypeId.Integer)]
-        [TestCase("cost :: 1.0 * 1.0", TypeId.UInteger)]
-        [TestCase("cost : Int : 1 * 1", TypeId.Integer)]
-        [TestCase("cost : UInt : 1 * 1", TypeId.UInteger)]
-        [TestCase("cost :: 1.0 * 1.0", TypeId.UInteger)]
-
+        [TestCase("const :: 1 * 1", TypeId.Integer)]
+        [TestCase("const :: 1.0 * 1.0", TypeId.UInteger)]
+        [TestCase("const : Int : 1 * 1", TypeId.Integer)]
+        [TestCase("const : UInt : 1 * 1", TypeId.UInteger)]
+        [TestCase("const :: 1.0 * 1.0", TypeId.UInteger)]
 
 //        [TestCase("t1 / t2 / t3", TypeId.Integer)]
 //        [TestCase("t1 % t2 % t3", TypeId.Integer)]
@@ -56,6 +55,17 @@ namespace TheLang.Tests
             var first = compiler.Tree.Files.First().Declarations.First();
 
             Assert.AreEqual(first.Type.Id, topType);
+        }
+
+        [TestCase("i1 := 1 ptr: @Int = @i1")]
+        public void ShouldPass(string proc)
+        {
+            var compiler = new Compiler();
+
+            using (var str = new StringReader(proc))
+                Assert.True(compiler.ParseProgram(str));
+
+            Assert.True(compiler.TypeCheck());
         }
     }
 }
