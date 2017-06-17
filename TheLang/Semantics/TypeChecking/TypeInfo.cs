@@ -18,10 +18,7 @@ namespace TheLang.Semantics.TypeChecking
         public string Name => Data.Name;
         public IEnumerable<TypeInfo> Children => Data.Children;
 
-        public TypeInfo(TypeInfoStruct value)
-        {
-            Data = value;
-        }
+        public TypeInfo(TypeInfoStruct value) => Data = value;
 
         public bool IsImplicitlyConvertibleTo(TypeInfo type)
         {
@@ -72,8 +69,6 @@ namespace TheLang.Semantics.TypeChecking
                     return Name;
                 case TypeId.Field:
                     return $"{Name}: {Children.First()}";
-                case TypeId.Constant:
-                    return $"Const({Children.First()})";
                 case TypeId.Float:
                     return $"Float{Size}";
                 case TypeId.Number:

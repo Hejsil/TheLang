@@ -41,6 +41,8 @@
         KeywordProcedure,
         KeywordFunction,
         KeywordReturn,
+        KeywordVar,
+        KeywordConst,
 
         Exponent,
         ExponentEqual,

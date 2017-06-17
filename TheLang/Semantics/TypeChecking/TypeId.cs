@@ -6,7 +6,6 @@
         Bool,
         Struct,
         Field,
-        Constant,
         Float,
         Number,
         UNumber,

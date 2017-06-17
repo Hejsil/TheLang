@@ -1,16 +1,11 @@
-﻿test :: proc(x: Int, y: Int) Int => {
-	return x + y
+﻿
+const Vec2 := strunt { 
+	var x: Int 
+	var y: Int 
 }
 
-test :: proc(x: Int, y: Int) Int => x + y
+var num := 100
 
-test : proc(Int, Int) Int : (x, y) => {
-	return x + y
-}
-
-test : proc(Int, Int) Int : (x, y) => x + y
-
-test :: struct {
-    test: Int
-
+const main := (args: []String) Int {
+	
 }

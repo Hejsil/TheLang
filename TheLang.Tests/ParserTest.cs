@@ -39,13 +39,13 @@ namespace TheLang.Tests
             using (var str = new StringReader($"test :: {expression}"))
                 Assert.True(compiler.ParseProgram(str));
 
-            var variable = compiler.Tree.Files.First().Declarations.First() as Variable;
+            var variable = compiler.Tree.Files.First().Declarations.First() as ASTVariable;
             Assert.NotNull(variable);
 
-            var op = variable.Value as BinaryNode;
+            var op = variable.Value as ASTBinaryNode;
             Assert.NotNull(op);
 
-            Assert.IsNotInstanceOf<BinaryNode>(associativity == Associativity.LeftToRight ? op.Right : op.Left);
+            Assert.IsNotInstanceOf<ASTBinaryNode>(associativity == Associativity.LeftToRight ? op.Right : op.Left);
         }
 
         
@@ -71,20 +71,20 @@ namespace TheLang.Tests
             using (var str = new StringReader($"test :: {expression}"))
                 Assert.True(compiler.ParseProgram(str));
 
-            var variable = compiler.Tree.Files.First().Declarations.First() as Variable;
+            var variable = compiler.Tree.Files.First().Declarations.First() as ASTVariable;
             Assert.NotNull(variable);
 
             TestThatChildrenUpholdPriority(variable.Value);
         }
 
-        private void TestThatChildrenUpholdPriority(Node node)
+        private void TestThatChildrenUpholdPriority(ASTNode astNode)
         {
             OpInfo info;
-            Assert.True(Parser.OperatorInfo.TryGetValue(node.GetType(), out info));
+            Assert.True(Parser.OperatorInfo.TryGetValue(astNode.GetType(), out info));
 
-            var binary = node as BinaryNode;
-            var unary = node as UnaryNode;
-            var dot = node as Dot;
+            var binary = astNode as ASTBinaryNode;
+            var unary = astNode as ASTUnaryNode;
+            var dot = astNode as ASTDot;
 
             if (binary != null)
             {

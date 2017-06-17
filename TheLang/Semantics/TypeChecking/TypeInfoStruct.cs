@@ -34,6 +34,7 @@ namespace TheLang.Semantics.TypeChecking
             : this(id, children, size, name)
         { }
 
+        public
         public TypeId Id { get; }
         public int Size { get; }
         public string Name { get; }

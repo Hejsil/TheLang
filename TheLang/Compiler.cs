@@ -9,14 +9,14 @@ namespace TheLang
 {
     public class Compiler
     {
-        public ProgramNode Tree { get; set; }
+        public ASTProgramNode Tree { get; set; }
 
         private readonly HashSet<string> _filesInProject = new HashSet<string>();
         private readonly Queue<string> _filesToCompile = new Queue<string>();
 
         public bool ParseProgram(TextReader reader)
         {
-            var files = new List<FileNode>();
+            var files = new List<ASTFileNode>();
             var parser = new Parser(reader, this);
 
             var fileNode = parser.ParseFile();
@@ -27,19 +27,19 @@ namespace TheLang
 
             ParserLoop(files);
 
-            Tree = new ProgramNode { Files = files };
+            Tree = new ASTProgramNode { Files = files };
 
             return true;
         }
 
         public bool ParseProgram()
         {
-            var files = new List<FileNode>();
+            var files = new List<ASTFileNode>();
 
             if (!ParserLoop(files))
                 return false;
 
-            Tree = new ProgramNode { Files = files };
+            Tree = new ASTProgramNode { Files = files };
 
             return true;
         }
@@ -69,7 +69,7 @@ namespace TheLang
                 $"Error at {position.FileName}:{position.Line}:{position.Column}: {message}");
         }
 
-        private bool ParserLoop(ICollection<FileNode> result)
+        private bool ParserLoop(ICollection<ASTFileNode> result)
         {
             while (_filesToCompile.Count != 0)
             {

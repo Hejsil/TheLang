@@ -8,6 +8,7 @@ using TheLang.AST.Expressions;
 using TheLang.AST.Expressions.Literals;
 using TheLang.AST.Expressions.Operators.Binary;
 using TheLang.AST.Expressions.Operators.Unary;
+using TheLang.AST.Expressions.Types;
 using TheLang.AST.Statments;
 
 namespace TheLang.Semantics.TypeChecking
@@ -45,7 +46,7 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(TypedProcedureLiteral node)
+        protected override bool Visit(ASTProcedureLiteral node)
         {
             _symbolTable.Push(new Dictionary<string, TypeInfo>());
 
@@ -66,7 +67,7 @@ namespace TheLang.Semantics.TypeChecking
             return result;
         }
 
-        protected override bool Visit(ProgramNode node)
+        protected override bool Visit(ASTProgramNode node)
         {
             var int64 = GetTypeInfo(new TypeInfoStruct(TypeId.Integer, TypeInfo.Bit64));
             var uint64 = GetTypeInfo(new TypeInfoStruct(TypeId.UInteger, TypeInfo.Bit64));
@@ -88,7 +89,7 @@ namespace TheLang.Semantics.TypeChecking
             return result;
         }
 
-        protected override bool Visit(StringLiteral node)
+        protected override bool Visit(ASTStringLiteral node)
         {
             var chr = GetTypeInfo(new TypeInfoStruct(TypeId.UInteger, TypeInfo.Bit8));
             var pointer = GetTypeInfo(new TypeInfoStruct(TypeId.Pointer, chr));
@@ -99,19 +100,19 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(IntegerLiteral node)
+        protected override bool Visit(ASTIntegerLiteral node)
         {
             node.Type = GetTypeInfo(new TypeInfoStruct(node.Value < 0 ? TypeId.Number : TypeId.UNumber));
             return true;
         }
 
-        protected override bool Visit(FloatLiteral node)
+        protected override bool Visit(ASTFloatLiteral node)
         {
             node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Float));
             return true;
         }
 
-        protected override bool Visit(ArrayPostfix node)
+        protected override bool Visit(ASTArrayType node)
         {
             if (!Visit(node.Child))
                 return false;
@@ -133,7 +134,7 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(Variable node)
+        protected override bool Visit(ASTVariable node)
         {
             if (!Visit(node.DeclaredType))
                 return false;
@@ -175,7 +176,7 @@ namespace TheLang.Semantics.TypeChecking
             if (peekTable.ContainsKey(node.Name))
             {
                 _compiler.ReportError(node.Position,
-                    $"Variable have already been declared in this scope.");
+                    $"ASTVariable have already been declared in this scope.");
                 return false;
             }
 
@@ -183,14 +184,14 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(Infer node) => true;
+        protected override bool Visit(ASTInfer node) => true;
 
         protected override bool Visit(Assign node)
         {
             throw new NotImplementedException();
         }
 
-        protected override bool Visit(Declaration node)
+        protected override bool Visit(ASTDeclaration node)
         {
             if (!Visit(node.DeclaredType))
                 return false;
@@ -209,7 +210,7 @@ namespace TheLang.Semantics.TypeChecking
             if (peekTable.ContainsKey(node.Name))
             {
                 _compiler.ReportError(node.Position,
-                    "Variable have already been declared in this scope.");
+                    "ASTVariable have already been declared in this scope.");
                 return false;
             }
 
@@ -218,7 +219,7 @@ namespace TheLang.Semantics.TypeChecking
         }
 
 
-        private bool VisitArithmeticOperators(BinaryNode node)
+        private bool VisitArithmeticOperators(ASTBinaryNode node)
         {
             if (!Visit(node.Left))
                 return false;
@@ -255,7 +256,7 @@ namespace TheLang.Semantics.TypeChecking
             }
         }
 
-        private bool VisitEqualityOperators(BinaryNode node)
+        private bool VisitEqualityOperators(ASTBinaryNode node)
         {
             if (!Visit(node.Left))
                 return false;
@@ -276,7 +277,7 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        private bool VisitRelationalOperators(BinaryNode node)
+        private bool VisitRelationalOperators(ASTBinaryNode node)
         {
             if (!Visit(node.Left))
                 return false;
@@ -315,7 +316,7 @@ namespace TheLang.Semantics.TypeChecking
             }
         }
 
-        private bool VisitLogicalOperators(BinaryNode node)
+        private bool VisitLogicalOperators(ASTBinaryNode node)
         {
             if (!Visit(node.Left))
                 return false;
@@ -353,7 +354,7 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(Symbol node)
+        protected override bool Visit(ASTSymbol node)
         {
             TypeInfo result;
             if (TryFindSymbolTypeInfo(node.Name, out result))
@@ -367,7 +368,7 @@ namespace TheLang.Semantics.TypeChecking
             return false;
         }
 
-        protected override bool Visit(TypeLiteral node)
+        protected override bool Visit(ASTStructInitializer node)
         {
             if (!Visit(node.Child))
                 return false;
@@ -377,21 +378,21 @@ namespace TheLang.Semantics.TypeChecking
 
 
             // TODO: Implement
-            _compiler.ReportError(node.Position, $"Not Implemented");
+            _compiler.ReportError(node.Position, $"ASTNot Implemented");
             return false;
         }
 
-        protected override bool Visit(Add node)
+        protected override bool Visit(ASTAdd node)
         {
             return VisitArithmeticOperators(node);
         }
 
-        protected override bool Visit(And node)
+        protected override bool Visit(ASTAnd node)
         {
             return VisitLogicalOperators(node);
         }
 
-        protected override bool Visit(As node)
+        protected override bool Visit(ASTAs node)
         {
             if (!Visit(node.Left))
                 return false;
@@ -411,12 +412,12 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(Divide node)
+        protected override bool Visit(ASTDivide node)
         {
             return VisitArithmeticOperators(node);
         }
 
-        protected override bool Visit(Dot node)
+        protected override bool Visit(ASTDot node)
         {
             if (!Visit(node.Left))
                 return false;
@@ -437,63 +438,63 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(Equal node)
+        protected override bool Visit(ASTEqual node)
         {
             return VisitEqualityOperators(node);
         }
 
-        protected override bool Visit(GreaterThan node)
+        protected override bool Visit(ASTGreaterThan node)
         {
             return VisitRelationalOperators(node);
         }
 
-        protected override bool Visit(GreaterThanEqual node)
+        protected override bool Visit(ASTGreaterThanEqual node)
         {
             return VisitRelationalOperators(node);
         }
 
-        protected override bool Visit(LessThan node)
+        protected override bool Visit(ASTLessThan node)
         {
             return VisitRelationalOperators(node);
         }
 
-        protected override bool Visit(LessThanEqual node)
+        protected override bool Visit(ASTLessThanEqual node)
         {
             return VisitRelationalOperators(node);
         }
 
-        protected override bool Visit(Modulo node)
+        protected override bool Visit(ASTModulo node)
         {
             return VisitArithmeticOperators(node);
         }
 
-        protected override bool Visit(NotEqual node)
+        protected override bool Visit(ASTNotEqual node)
         {
             return VisitEqualityOperators(node);
         }
 
-        protected override bool Visit(Or node)
+        protected override bool Visit(ASTOr node)
         {
             return VisitLogicalOperators(node);
         }
 
-        protected override bool Visit(Sub node)
+        protected override bool Visit(ASTSub node)
         {
             return VisitArithmeticOperators(node);
         }
 
-        protected override bool Visit(Times node)
+        protected override bool Visit(ASTTimes node)
         {
             return VisitArithmeticOperators(node);
         }
 
-        protected override bool Visit(StructType node)
+        protected override bool Visit(ASTStructType node)
         {
             if (!VisitCollection(node.Fields))
                 return false;
 
             var fields = node.Fields
-                .Where(f => !(f is Variable && ((Variable)f).IsConstant))
+                .Where(f => !(f is ASTVariable && ((ASTVariable)f).IsConstant))
                 .Select(f => GetTypeInfo(new TypeInfoStruct(TypeId.Field, f.Name, f.Type)));
 
             var composit = GetTypeInfo(new TypeInfoStruct(TypeId.Struct, children: fields));
@@ -501,7 +502,7 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(Dereference node)
+        protected override bool Visit(ASTDereference node)
         {
             if (!Visit(node.Child))
                 return false;
@@ -517,7 +518,7 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(Negative node)
+        protected override bool Visit(ASTNegative node)
         {
             if (!Visit(node.Child))
                 return false;
@@ -540,7 +541,7 @@ namespace TheLang.Semantics.TypeChecking
             }
         }
 
-        protected override bool Visit(Not node)
+        protected override bool Visit(ASTNot node)
         {
             if (!Visit(node.Child))
                 return false;
@@ -556,7 +557,7 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(Positive node)
+        protected override bool Visit(ASTPositive node)
         {
             if (!Visit(node.Child))
                 return false;
@@ -572,7 +573,7 @@ namespace TheLang.Semantics.TypeChecking
                 case TypeId.UInteger:
                     break;
                 default:
-                    _compiler.ReportError(node.Position, $"Cannot apply unary + on {childType}.");
+                    _compiler.ReportError(node.Position, $"Cannot apply unaryAst + on {childType}.");
                     return false;
             }
 
@@ -580,7 +581,7 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(Reference node)
+        protected override bool Visit(ASTReference node)
         {
             if (!Visit(node.Child))
                 return false;
@@ -589,7 +590,7 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(Indexing node)
+        protected override bool Visit(ASTIndexing node)
         {
             if (!Visit(node.Child))
                 return false;
@@ -607,7 +608,7 @@ namespace TheLang.Semantics.TypeChecking
             if (argumentType.Id != TypeId.Integer && argumentType.Id != TypeId.UInteger)
             {
                 // TODO: Error
-                _compiler.ReportError(node.Position, $"Indexing does not take {argumentType} as an argument.");
+                _compiler.ReportError(node.Position, $"ASTIndexing does not take {argumentType} as an argument.");
                 return false;
             }
 
@@ -617,7 +618,7 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(Call node)
+        protected override bool Visit(ASTCall node)
         {
             if (!Visit(node.Child))
                 return false;
@@ -664,7 +665,7 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(ProcedureType node)
+        protected override bool Visit(ASTProcedureType node)
         {
             if (!VisitCollection(node.Arguments))
                 return false;

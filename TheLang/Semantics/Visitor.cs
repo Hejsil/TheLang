@@ -8,6 +8,7 @@ using TheLang.AST.Expressions.Literals;
 using TheLang.AST.Expressions.Operators;
 using TheLang.AST.Expressions.Operators.Binary;
 using TheLang.AST.Expressions.Operators.Unary;
+using TheLang.AST.Expressions.Types;
 using TheLang.AST.Statments;
 
 namespace TheLang.Semantics
@@ -17,53 +18,53 @@ namespace TheLang.Semantics
         public bool Visit(dynamic node) => Visit(node);
 
         protected abstract bool Visit(Assign node);
-        protected abstract bool Visit(Declaration node);
+        protected abstract bool Visit(ASTDeclaration node);
         protected abstract bool Visit(Return node);
-        protected abstract bool Visit(Variable node);
+        protected abstract bool Visit(ASTVariable node);
 
-        protected abstract bool Visit(FloatLiteral node);
-        protected abstract bool Visit(Infer node);
-        protected abstract bool Visit(IntegerLiteral node);
-        protected abstract bool Visit(ProcedureType node);
-        protected abstract bool Visit(StringLiteral node);
-        protected abstract bool Visit(StructType node);
+        protected abstract bool Visit(ASTFloatLiteral node);
+        protected abstract bool Visit(ASTInfer node);
+        protected abstract bool Visit(ASTIntegerLiteral node);
+        protected abstract bool Visit(ASTProcedureType node);
+        protected abstract bool Visit(ASTStringLiteral node);
+        protected abstract bool Visit(ASTStructType node);
         protected abstract bool Visit(TupleLiteral node);
-        protected abstract bool Visit(TypedProcedureLiteral node);
-        protected abstract bool Visit(TypeLiteral node);
+        protected abstract bool Visit(ASTProcedureLiteral node);
+        protected abstract bool Visit(ASTStructInitializer node);
 
-        protected abstract bool Visit(Add node);
-        protected abstract bool Visit(And node);
-        protected abstract bool Visit(As node);
-        protected abstract bool Visit(Divide node);
-        protected abstract bool Visit(Dot node);
-        protected abstract bool Visit(Equal node);
-        protected abstract bool Visit(GreaterThan node);
-        protected abstract bool Visit(GreaterThanEqual node);
-        protected abstract bool Visit(LessThan node);
-        protected abstract bool Visit(LessThanEqual node);
-        protected abstract bool Visit(Modulo node);
-        protected abstract bool Visit(NotEqual node);
-        protected abstract bool Visit(Or node);
-        protected abstract bool Visit(Sub node);
-        protected abstract bool Visit(Times node);
+        protected abstract bool Visit(ASTAdd node);
+        protected abstract bool Visit(ASTAnd node);
+        protected abstract bool Visit(ASTAs node);
+        protected abstract bool Visit(ASTDivide node);
+        protected abstract bool Visit(ASTDot node);
+        protected abstract bool Visit(ASTEqual node);
+        protected abstract bool Visit(ASTGreaterThan node);
+        protected abstract bool Visit(ASTGreaterThanEqual node);
+        protected abstract bool Visit(ASTLessThan node);
+        protected abstract bool Visit(ASTLessThanEqual node);
+        protected abstract bool Visit(ASTModulo node);
+        protected abstract bool Visit(ASTNotEqual node);
+        protected abstract bool Visit(ASTOr node);
+        protected abstract bool Visit(ASTSub node);
+        protected abstract bool Visit(ASTTimes node);
 
-        protected abstract bool Visit(ArrayPostfix node);
-        protected abstract bool Visit(Call node);
-        protected abstract bool Visit(Dereference node);
-        protected abstract bool Visit(Indexing node);
-        protected abstract bool Visit(Negative node);
-        protected abstract bool Visit(Not node);
-        protected abstract bool Visit(Positive node);
-        protected abstract bool Visit(Reference node);
+        protected abstract bool Visit(ASTArrayType node);
+        protected abstract bool Visit(ASTCall node);
+        protected abstract bool Visit(ASTDereference node);
+        protected abstract bool Visit(ASTIndexing node);
+        protected abstract bool Visit(ASTNegative node);
+        protected abstract bool Visit(ASTNot node);
+        protected abstract bool Visit(ASTPositive node);
+        protected abstract bool Visit(ASTReference node);
         protected abstract bool Visit(UniqueReference node);
 
-        protected abstract bool Visit(Symbol node);
+        protected abstract bool Visit(ASTSymbol node);
 
-        protected virtual bool Visit(ProgramNode node) => VisitCollection(node.Files);
-        protected virtual bool Visit(FileNode node) => VisitCollection(node.Declarations);
-        protected virtual bool Visit(CodeBlock node) => VisitCollection(node.Statements);
+        protected virtual bool Visit(ASTProgramNode node) => VisitCollection(node.Files);
+        protected virtual bool Visit(ASTFileNode node) => VisitCollection(node.Declarations);
+        protected virtual bool Visit(ASTCodeBlock node) => VisitCollection(node.Statements);
 
-        protected bool VisitCollection<T>(IEnumerable<T> nodes) where T : Node
+        protected bool VisitCollection<T>(IEnumerable<T> nodes) where T : ASTNode
         {
             var succes = true;
 

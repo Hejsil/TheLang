@@ -8,6 +8,7 @@ using TheLang.AST.Expressions;
 using TheLang.AST.Expressions.Literals;
 using TheLang.AST.Expressions.Operators.Binary;
 using TheLang.AST.Expressions.Operators.Unary;
+using TheLang.AST.Expressions.Types;
 using TheLang.AST.Statments;
 
 namespace TheLang.Syntax
@@ -17,39 +18,38 @@ namespace TheLang.Syntax
         public static readonly Dictionary<Type, OpInfo> OperatorInfo =
             new Dictionary<Type, OpInfo>
         {
-            { typeof(Parentheses), new OpInfo(int.MinValue, Associativity.LeftToRight) },
+            { typeof(ASTParentheses), new OpInfo(int.MinValue, Associativity.LeftToRight) },
 
-            { typeof(Dot), new OpInfo(0, Associativity.LeftToRight) },
+            { typeof(ASTDot), new OpInfo(0, Associativity.LeftToRight) },
 
-            { typeof(Call), new OpInfo(1, Associativity.LeftToRight) },
-            { typeof(Indexing), new OpInfo(1, Associativity.LeftToRight) },
+            { typeof(ASTCall), new OpInfo(1, Associativity.LeftToRight) },
+            { typeof(ASTIndexing), new OpInfo(1, Associativity.LeftToRight) },
 
-            { typeof(Reference), new OpInfo(2, Associativity.RightToLeft) },
-            { typeof(UniqueReference), new OpInfo(2, Associativity.RightToLeft) },
-            { typeof(Dereference), new OpInfo(2, Associativity.RightToLeft) },
-            { typeof(Negative), new OpInfo(2, Associativity.RightToLeft) },
-            { typeof(Positive), new OpInfo(2, Associativity.RightToLeft) },
-            { typeof(Not), new OpInfo(2, Associativity.RightToLeft) },
+            { typeof(ASTReference), new OpInfo(2, Associativity.RightToLeft) },
+            { typeof(ASTDereference), new OpInfo(2, Associativity.RightToLeft) },
+            { typeof(ASTNegative), new OpInfo(2, Associativity.RightToLeft) },
+            { typeof(ASTPositive), new OpInfo(2, Associativity.RightToLeft) },
+            { typeof(ASTNot), new OpInfo(2, Associativity.RightToLeft) },
 
-            { typeof(As), new OpInfo(3, Associativity.LeftToRight) },
+            { typeof(ASTAs), new OpInfo(3, Associativity.LeftToRight) },
 
-            { typeof(Times), new OpInfo(4, Associativity.LeftToRight) },
-            { typeof(Divide), new OpInfo(4, Associativity.LeftToRight) },
-            { typeof(Modulo), new OpInfo(4, Associativity.LeftToRight) },
+            { typeof(ASTTimes), new OpInfo(4, Associativity.LeftToRight) },
+            { typeof(ASTDivide), new OpInfo(4, Associativity.LeftToRight) },
+            { typeof(ASTModulo), new OpInfo(4, Associativity.LeftToRight) },
 
-            { typeof(Add), new OpInfo(5, Associativity.LeftToRight) },
-            { typeof(Sub), new OpInfo(5, Associativity.LeftToRight) },
+            { typeof(ASTAdd), new OpInfo(5, Associativity.LeftToRight) },
+            { typeof(ASTSub), new OpInfo(5, Associativity.LeftToRight) },
 
-            { typeof(LessThan), new OpInfo(6, Associativity.LeftToRight) },
-            { typeof(LessThanEqual), new OpInfo(6, Associativity.LeftToRight) },
-            { typeof(GreaterThan), new OpInfo(6, Associativity.LeftToRight) },
-            { typeof(GreaterThanEqual), new OpInfo(6, Associativity.LeftToRight) },
+            { typeof(ASTLessThan), new OpInfo(6, Associativity.LeftToRight) },
+            { typeof(ASTLessThanEqual), new OpInfo(6, Associativity.LeftToRight) },
+            { typeof(ASTGreaterThan), new OpInfo(6, Associativity.LeftToRight) },
+            { typeof(ASTGreaterThanEqual), new OpInfo(6, Associativity.LeftToRight) },
 
-            { typeof(Equal), new OpInfo(7, Associativity.LeftToRight) },
-            { typeof(NotEqual), new OpInfo(7, Associativity.LeftToRight) },
+            { typeof(ASTEqual), new OpInfo(7, Associativity.LeftToRight) },
+            { typeof(ASTNotEqual), new OpInfo(7, Associativity.LeftToRight) },
 
-            { typeof(And), new OpInfo(8, Associativity.LeftToRight) },
-            { typeof(Or), new OpInfo(8, Associativity.LeftToRight) },
+            { typeof(ASTAnd), new OpInfo(8, Associativity.LeftToRight) },
+            { typeof(ASTOr), new OpInfo(8, Associativity.LeftToRight) },
         };
 
         private readonly Compiler _compiler;
@@ -70,13 +70,13 @@ namespace TheLang.Syntax
         /// 
         /// 
         /// File syntax:
-        ///   File -> Declaration*
+        ///   File -> ASTDeclaration*
         ///   
         /// </summary>
         /// <returns></returns>
-        public FileNode ParseFile()
+        public ASTFileNode ParseFile()
         {
-            var declarations = new List<Node>();
+            var declarations = new List<ASTNode>();
             var start = PeekToken();
 
             while (!EatToken(TokenKind.EndOfFile))
@@ -99,25 +99,35 @@ namespace TheLang.Syntax
                 }
             }
 
-            return new FileNode(start.Position) { Declarations = declarations };
+            return new ASTFileNode(start.Position) { Declarations = declarations };
         }
 
         /// <summary>
         /// 
         /// 
-        /// Declaration syntax:
-        ///   Declaration -> Identifier ":" Expression
-        ///                | Identifier ":" Expression? ( ":" | "=" ) Expression
+        /// ASTDeclaration syntax:
+        ///   ASTDeclaration -> var Identifier ":" Type
+        ///                | (const | var) Identifier ":" Type? "=" Expression
         /// 
         /// </summary>
         /// <returns></returns>
-        private Declaration ParseDeclaration()
+        private ASTDeclaration ParseDeclaration()
         {
+            if (!EatToken(TokenKind.KeywordVar) && !EatToken(TokenKind.KeywordConst))
+            {
+                var peek = PeekToken();
+                _compiler.ReportError(peek.Position,
+                    $"Was trying to parse a ASTDeclaration and expected an {TokenKind.KeywordConst} or {TokenKind.KeywordVar}, but got {peek.Kind}.");
+                return null;
+            }
+
+            var isConst = EatenToken.Kind == TokenKind.KeywordConst;
+
             if (!EatToken(TokenKind.Identifier))
             {
                 var peek = PeekToken();
                 _compiler.ReportError(peek.Position,
-                    $"Was trying to parse a Declaration and expected an {TokenKind.Identifier}, but got {peek.Kind}.");
+                    $"Was trying to parse a ASTDeclaration and expected an {TokenKind.Identifier}, but got {peek.Kind}.");
                 return null;
             }
 
@@ -126,23 +136,23 @@ namespace TheLang.Syntax
             {
                 var peek = PeekToken();
                 _compiler.ReportError(peek.Position,
-                    $"Was trying to parse a Declaration and expected an {TokenKind.Colon}, but got {peek.Kind}.");
+                    $"Was trying to parse a ASTDeclaration and expected an {TokenKind.Colon}, but got {peek.Kind}.");
                 return null;
             }
 
-            Node type;
-            if (PeekTokenIs(t => t == TokenKind.Colon || t == TokenKind.Equal))
+            ASTNode type;
+            if (PeekTokenIs(TokenKind.Equal))
             {
-                type = new Infer();
+                type = new ASTInfer();
             }
             else
             {
-                type = ParseExpression();
+                type = ParseType();
                 if (type == null)
                     return null;
             }
 
-            if (EatToken(t => t.Kind == TokenKind.Colon || t.Kind == TokenKind.Equal))
+            if (EatToken(TokenKind.Equal))
             {
                 var colonOrEqual = EatenToken;
 
@@ -150,15 +160,16 @@ namespace TheLang.Syntax
                 if (expression == null)
                     return null;
 
-                return new Variable(identifier.Position, colonOrEqual.Kind == TokenKind.Colon)
+                return new ASTVariable(identifier.Position)
                 {
+                    IsConstant = isConst,
                     DeclaredType = type,
                     Name = identifier.Value,
                     Value = expression
                 };
             }
 
-            return new Declaration(EatenToken.Position)
+            return new ASTDeclaration(EatenToken.Position)
             {
                 DeclaredType = type,
                 Name = identifier.Value
@@ -173,7 +184,7 @@ namespace TheLang.Syntax
         ///
         /// </summary>
         /// <returns></returns>
-        private Node ParseExpression()
+        private ASTNode ParseExpression()
         {
             var top = ParseUnary();
             if (top == null)
@@ -196,7 +207,7 @@ namespace TheLang.Syntax
                     return null;
                 }
 
-                Node prev = null;
+                ASTNode prev = null;
                 var current = top;
                 OpInfo currentInfo;
 
@@ -204,8 +215,8 @@ namespace TheLang.Syntax
                 while (OperatorInfo.TryGetValue(current.GetType(), out currentInfo) &&
                        opInfo.Priority <= currentInfo.Priority)
                 {
-                    var unary = current as UnaryNode;
-                    var binary = current as BinaryNode;
+                    var unary = current as ASTUnaryNode;
+                    var binary = current as ASTBinaryNode;
 
                     if (unary != null)
                     {
@@ -228,7 +239,7 @@ namespace TheLang.Syntax
                     }
                 }
 
-                if (op is Dot && !(right is Symbol))
+                if (op is ASTDot && !(right is ASTSymbol))
                 {
                     // TODO: Better error
                     _compiler.ReportError(right.Position,
@@ -240,8 +251,8 @@ namespace TheLang.Syntax
                 op.Left = current;
 
                 {
-                    var unary = prev as UnaryNode;
-                    var binary = prev as BinaryNode;
+                    var unary = prev as ASTUnaryNode;
+                    var binary = prev as ASTBinaryNode;
 
                     if (unary != null)
                         unary.Child = op;
@@ -260,57 +271,30 @@ namespace TheLang.Syntax
         /// <summary>
         /// 
         /// Unary syntax:
-        ///   Unary -> ( UnaryOperator | ArrayTypePrefix )* Term ( TypeLiteral | Call | Indexing )*
-        ///   ArrayTypePrefix -> "[" ","* "]"
-        ///   TypeLiteral -> "{" ( Expression ( "," Expression )* ","? )? "}"
-        ///   Call -> "(" ( Expression ( "," Expression )* )? ")"
-        ///   Indexing -> "[" Expression "]"
+        ///   Unary -> UnaryOperator* Term ( ASTStructInitializer | ASTCall | ASTIndexing )*
+        ///   ASTStructInitializer -> "{" ( Expression ( "," Expression )* ","? )? "}"
+        ///   ASTCall -> "(" ( Expression ( "," Expression )* )? ")"
+        ///   ASTIndexing -> "[" Expression "]"
         ///   
         /// </summary>
         /// <returns></returns>
-        private Node ParseUnary()
+        private ASTNode ParseUnary()
         {
-            UnaryNode unary = null;
-            UnaryNode unaryChild = null;
+            ASTUnaryNode astUnary = null;
+            ASTUnaryNode astUnaryChild = null;
 
             do
             {
-                if (unary != null)
-                    unary.Child = unaryChild;
+                if (astUnary != null)
+                    astUnary.Child = astUnaryChild;
 
-                unary = unaryChild;
-                unaryChild = null;
+                astUnary = astUnaryChild;
+                astUnaryChild = null;
 
                 if (EatToken(IsUnaryOperator))
-                {
-                    unaryChild = MakeUnaryOperator(EatenToken);
-                }
-                else if (EatToken(TokenKind.SquareLeft))
-                {
-                    var first = EatenToken;
+                    astUnaryChild = MakeUnaryOperator(EatenToken);
 
-                    if (EatToken(TokenKind.SquareRight))
-                    {
-                        unaryChild = new ArrayPostfix(first.Position) { Size = new Infer() };
-                    }
-                    else
-                    {
-                        var expr = ParseExpression();
-                        if (expr == null)
-                            return null;
-
-                        if (!EatToken(TokenKind.SquareRight))
-                        {
-                            // TODO: Error
-                            var peek = PeekToken();
-                            _compiler.ReportError(peek.Position, $"");
-                            return null;
-                        }
-
-                        unaryChild = new ArrayPostfix(first.Position) { Size = expr };
-                    }
-                }
-            } while (unaryChild != null);
+            } while (astUnaryChild != null);
 
 
             var leaf = ParseTerm();
@@ -322,7 +306,7 @@ namespace TheLang.Syntax
             {
                 if (EatToken(TokenKind.CurlyLeft))
                 {
-                    var expressions = new List<Node>();
+                    var expressions = new List<ASTNode>();
 
                     if (!EatToken(TokenKind.CurlyRight))
                     {
@@ -346,15 +330,13 @@ namespace TheLang.Syntax
                         }
                     }
 
-                    leaf = new TypeLiteral(leaf.Position) { Child = leaf, Values = expressions };
+                    leaf = new ASTStructInitializer(leaf.Position) { Child = leaf, Values = expressions };
                     continue;
                 }
 
                 if (EatToken(TokenKind.ParenthesesLeft))
                 {
-                    var start = EatenToken;
-
-                    var arguments = new List<Node>();
+                    var arguments = new List<ASTNode>();
                     while (!EatToken(TokenKind.ParenthesesRight))
                     {
                         if (arguments.Count != 0 && !EatToken(TokenKind.Comma))
@@ -372,7 +354,7 @@ namespace TheLang.Syntax
                         arguments.Add(argument);
                     }
 
-                    leaf = new Call(leaf.Position) { Child = leaf, Arguments = arguments };
+                    leaf = new ASTCall(leaf.Position) { Child = leaf, Arguments = arguments };
                     continue;
                 }
 
@@ -389,17 +371,17 @@ namespace TheLang.Syntax
                         return null;
                     }
 
-                    leaf = new Indexing(leaf.Position) { Child = leaf, Argument = argument };
+                    leaf = new ASTIndexing(leaf.Position) { Child = leaf, Argument = argument };
                     continue;
                 }
 
                 break;
             }
 
-            if (unary != null)
+            if (astUnary != null)
             {
-                unary.Child = leaf;
-                return unary;
+                astUnary.Child = leaf;
+                return astUnary;
             }
 
             return leaf;
@@ -413,29 +395,26 @@ namespace TheLang.Syntax
         ///         | DecimalNumber
         ///         | String
         ///         | "(" Expression ")"
-        ///         | "struct" "{" Declaration* "}"
         ///         | ProcedureLiteral
-        ///         | ProcedureType
         ///   
-        ///   ProcedureType -> ( "func" | "proc" ) "(" ( Expression ( "," Expression )* )? ")" Expression
-        ///   ProcedureLiteral -> ( "func" | "proc" ) "(" ( Declaration ( "," Declaration )* )? ")" Expression "=>" CodeBlock
-        ///                     | "(" ( Identifier ( "," Identifier )* )? ")" "=>" CodeBlock
+        ///   ProcedureLiteral -> ( "func" | "proc" ) "(" ( ASTDeclaration ( "," ASTDeclaration )* )? ")" Expression "=>" ASTCodeBlock
+        ///                     | "(" ( Identifier ( "," Identifier )* )? ")" "=>" ASTCodeBlock
         /// 
         /// </summary>
         /// <returns></returns>
-        private Node ParseTerm()
+        private ASTNode ParseTerm()
         {
             if (EatToken(TokenKind.Identifier))
-                return new Symbol(EatenToken.Position, EatenToken.Value);
+                return new ASTSymbol(EatenToken.Position, EatenToken.Value);
 
             if (EatToken(TokenKind.FloatNumber))
-                return new FloatLiteral(EatenToken.Position, double.Parse(EatenToken.Value));
+                return new ASTFloatLiteral(EatenToken.Position, double.Parse(EatenToken.Value));
 
             if (EatToken(TokenKind.DecimalNumber))
-                return new IntegerLiteral(EatenToken.Position, int.Parse(EatenToken.Value));
+                return new ASTIntegerLiteral(EatenToken.Position, int.Parse(EatenToken.Value));
             
             if (EatToken(TokenKind.String))
-                return new StringLiteral(EatenToken.Position, EatenToken.Value);
+                return new ASTStringLiteral(EatenToken.Position, EatenToken.Value);
 
             if (EatToken(TokenKind.ParenthesesLeft))
             {
@@ -445,14 +424,13 @@ namespace TheLang.Syntax
                     return null;
 
                 if (EatToken(TokenKind.ParenthesesRight))
-                    return expression;
+                    return new ASTParentheses(start.Position) { Child = expression };
 
                 _compiler.ReportError(EatenToken.Position,
                     $"Could not find a pair for the left parentheses at {start.Position.Line}:{start.Position.Column}. Expected {TokenKind.ParenthesesRight}, but got {EatenToken.Kind}.");
                 return null;
             }
-
-            // TODO: This does not parse correctly
+            
             if (EatToken(t => t == TokenKind.KeywordFunction || t == TokenKind.KeywordProcedure))
             {
                 var start = EatenToken;
@@ -463,139 +441,39 @@ namespace TheLang.Syntax
                         $"Could not find the start parentheses at the start of a procedure's argument. Expected {TokenKind.ParenthesesLeft}, but got {peek.Kind}.");
                     return null;
                 }
-
-                // We can't determin from the arguments whether we are a procedure type or literal, if we have no arguments.
-                // We therefore have to handle the empty procedure differently
-                if (EatToken(TokenKind.ParenthesesRight))
+                
+                var arguments = new List<ASTDeclaration>();
+                while (!EatToken(TokenKind.ParenthesesRight))
                 {
-                    var returnType = ParseExpression();
-                    if (returnType == null)
-                        return null;
-
-                    if (EatToken(TokenKind.Arrow))
+                    if (arguments.Count != 0 && !EatToken(TokenKind.Comma))
                     {
-                        var block = ParseCodeBlock();
-                        if (block == null)
-                            return null;
-
-                        return new TypedProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
-                        {
-                            Block = block,
-                            Return = returnType,
-                            Arguments = Enumerable.Empty<Declaration>()
-                        };
-                    }
-
-                    return new ProcedureType(start.Position, start.Kind == TokenKind.KeywordFunction)
-                    {
-                        Arguments = new []{ returnType }
-                    };
-                }
-
-                // If first argument looks like a declarations, then we parse the procedure as a literal
-                if (PeekTokenIs(TokenKind.Identifier) && PeekTokenIs(TokenKind.Colon, 1))
-                {
-                    var arguments = new List<Declaration>();
-
-                    while (!EatToken(TokenKind.ParenthesesRight))
-                    {
-                        if (arguments.Count != 0 && !EatToken(TokenKind.Comma))
-                        {
-                            var peek = PeekToken();
-                            _compiler.ReportError(peek.Position,
-                                $"Found an unexpected token when parsing a procedure's arguments. Expected {TokenKind.Comma}, but got {peek.Kind}.");
-                            return null;
-                        }
-
-                        var declaration = ParseDeclaration();
-                        if (declaration == null)
-                            return null;
-
-                        arguments.Add(declaration);
-                    }
-
-                    var returnType = ParseExpression();
-                    if (returnType == null)
-                        return null;
-
-                    if (EatToken(TokenKind.Arrow))
-                    {
-                        var block = ParseCodeBlock();
-                        if (block == null)
-                            return null;
-
-                        return new TypedProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
-                        {
-                            Block = block,
-                            Return = returnType,
-                            Arguments = arguments
-                        };
-                    }
-
-                    {
-                        // TODO: Error
                         var peek = PeekToken();
-                        _compiler.ReportError(peek.Position, "");
+                        _compiler.ReportError(peek.Position,
+                            $"Found an unexpected token when parsing a procedure's arguments. Expected {TokenKind.Comma}, but got {peek.Kind}.");
                         return null;
                     }
-                }
 
-                // Else we parse it as a type
-                {
-                    var arguments = new List<Node>();
-
-                    while (!EatToken(TokenKind.ParenthesesRight))
-                    {
-                        if (arguments.Count != 0 && !EatToken(TokenKind.Comma))
-                        {
-                            var peek = PeekToken();
-                            _compiler.ReportError(peek.Position,
-                                $"Found an unexpected token when parsing a procedure's arguments. Expected {TokenKind.Comma}, but got {peek.Kind}.");
-                            return null;
-                        }
-
-                        var argument = ParseExpression();
-                        if (argument == null)
-                            return null;
-
-                        arguments.Add(argument);
-                    }
-
-                    var returnType = ParseExpression();
-                    if (returnType == null)
+                    var declaration = ParseDeclaration();
+                    if (declaration == null)
                         return null;
 
-                    arguments.Add(returnType);
-                    return new ProcedureType(start.Position, start.Kind == TokenKind.KeywordFunction)
-                    {
-                        Arguments = arguments,
-                    };
+                    arguments.Add(declaration);
                 }
-            }
 
-            if (EatToken(TokenKind.KeywordStruct))
-            {
-                var start = EatenToken;
-
-                if (!EatToken(TokenKind.CurlyLeft))
-                {
-                    var peek = PeekToken();
-                    _compiler.ReportError(peek.Position,
-                        $"");
+                var returnType = ParseExpression();
+                if (returnType == null)
                     return null;
-                }
+                
+                var block = ParseCodeBlock();
+                if (block == null)
+                    return null;
 
-                var fields = new List<Declaration>();
-                while (!EatToken(TokenKind.CurlyRight))
+                return new ASTProcedureLiteral(start.Position, start.Kind == TokenKind.KeywordFunction)
                 {
-                    var decl = ParseDeclaration();
-                    if (decl == null)
-                        return null;
-
-                    fields.Add(decl);
-                }
-
-                return new StructType(start.Position) { Fields = fields };
+                    Block = block,
+                    Return = returnType,
+                    Arguments = arguments
+                };
             }
 
             {
@@ -610,7 +488,7 @@ namespace TheLang.Syntax
         /// 
         /// </summary>
         /// <returns></returns>
-        private CodeBlock ParseCodeBlock()
+        private ASTCodeBlock ParseCodeBlock()
         {
             if (!EatToken(TokenKind.CurlyLeft))
             {
@@ -621,7 +499,7 @@ namespace TheLang.Syntax
             }
 
             var start = EatenToken;
-            var statements = new List<Node>();
+            var statements = new List<ASTNode>();
 
             while (!EatToken(TokenKind.CurlyRight))
             {
@@ -649,68 +527,66 @@ namespace TheLang.Syntax
                 }
             }
 
-            return new CodeBlock(start.Position) { Statements = statements };
+            return new ASTCodeBlock(start.Position) { Statements = statements };
         }
 
-        private static BinaryNode MakeBinaryOperator(Token token)
+        private static ASTBinaryNode MakeBinaryOperator(Token token)
         {
             var kind = token.Kind;
             var pos = token.Position;
             switch (kind)
             {
                 case TokenKind.Plus:
-                    return new Add(pos);
+                    return new ASTAdd(pos);
                 case TokenKind.Minus:
-                    return new Sub(pos);
+                    return new ASTSub(pos);
                 case TokenKind.Times:
-                    return new Times(pos);
+                    return new ASTTimes(pos);
                 case TokenKind.Divide:
-                    return new Divide(pos);
+                    return new ASTDivide(pos);
                 case TokenKind.EqualEqual:
-                    return new Equal(pos);
+                    return new ASTEqual(pos);
                 case TokenKind.Modulo:
-                    return new Modulo(pos);
+                    return new ASTModulo(pos);
                 case TokenKind.LessThan:
-                    return new LessThan(pos);
+                    return new ASTLessThan(pos);
                 case TokenKind.LessThanEqual:
-                    return new LessThanEqual(pos);
+                    return new ASTLessThanEqual(pos);
                 case TokenKind.GreaterThan:
-                    return new GreaterThan(pos);
+                    return new ASTGreaterThan(pos);
                 case TokenKind.GreaterThanEqual:
-                    return new GreaterThanEqual(pos);
+                    return new ASTGreaterThanEqual(pos);
                 case TokenKind.ExclamationMarkEqual:
-                    return new NotEqual(pos);
+                    return new ASTNotEqual(pos);
                 case TokenKind.KeywordAnd:
-                    return new And(pos);
+                    return new ASTAnd(pos);
                 case TokenKind.KeywordOr:
-                    return new Or(pos);
+                    return new ASTOr(pos);
                 case TokenKind.KeywordAs:
-                    return new As(pos);
+                    return new ASTAs(pos);
                 case TokenKind.Dot:
-                    return new Dot(pos);
+                    return new ASTDot(pos);
                 default:
                     throw new ArgumentOutOfRangeException(nameof(kind), kind, null);
             }
         }
 
-        private static UnaryNode MakeUnaryOperator(Token token)
+        private static ASTUnaryNode MakeUnaryOperator(Token token)
         {
             var kind = token.Kind;
             var pos = token.Position;
             switch (kind)
             {
                 case TokenKind.ExclamationMark:
-                    return new Not(pos);
+                    return new ASTNot(pos);
                 case TokenKind.At:
-                    return new Reference(pos);
-                case TokenKind.UAt:
-                    return new UniqueReference(pos);
+                    return new ASTReference(pos);
                 case TokenKind.Tilde:
-                    return new Dereference(pos);
+                    return new ASTDereference(pos);
                 case TokenKind.Plus:
-                    return new Positive(pos);
+                    return new ASTPositive(pos);
                 case TokenKind.Minus:
-                    return new Negative(pos);
+                    return new ASTNegative(pos);
                 default:
                     throw new ArgumentOutOfRangeException(nameof(kind), kind, null);
             }
