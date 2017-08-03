@@ -9,3 +9,8 @@ var num := 100
 const main := (args: []String) Int {
 	
 }
+
+
+Static_Array = struct|T: type| {
+
+}

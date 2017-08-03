@@ -5,8 +5,8 @@
         // Unary operators
         ExclamationMark,
         At,
-        UAt,
         Tilde,
+        And,
 
         // Binary operators
         Plus,
@@ -43,6 +43,9 @@
         KeywordReturn,
         KeywordVar,
         KeywordConst,
+        KeywordEnum,
+        KeywordBreak,
+        KeywordContinue,
 
         Exponent,
         ExponentEqual,
@@ -63,6 +66,6 @@
         Comma,
 
         EndOfFile,
-        Unknown
+        Unknown,
     }
 }

@@ -1,7 +1,7 @@
 ﻿using TheLang.AST.Bases;
 using TheLang.Syntax;
 
-namespace TheLang.AST.Expressions.Operators.Unary
+namespace TheLang.AST.Expressions.Types
 {
     public class ASTArrayType : ASTUnaryNode
     {

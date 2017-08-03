@@ -26,9 +26,14 @@ namespace TheLang.Syntax
             { "and", TokenKind.KeywordAnd },
             { "or", TokenKind.KeywordOr },
             { "struct", TokenKind.KeywordStruct },
+            { "enum", TokenKind.KeywordEnum },
             { "proc", TokenKind.KeywordProcedure },
-            { "func", TokenKind.KeywordFunction },
+            //{ "func", TokenKind.KeywordFunction },
             { "return", TokenKind.KeywordReturn },
+            { "break", TokenKind.KeywordBreak },
+            { "continue", TokenKind.KeywordContinue },
+            { "var", TokenKind.KeywordVar },
+            { "const", TokenKind.KeywordConst },
         };
 
         public Scanner(string fileName)
@@ -139,6 +144,8 @@ namespace TheLang.Syntax
                     return new Token(position, TokenKind.At);
                 case '~':
                     return new Token(position, TokenKind.Tilde);
+                case '&':
+                    return new Token(position, TokenKind.And);
                 case '[':
                     return new Token(position, TokenKind.SquareLeft);
                 case ']':

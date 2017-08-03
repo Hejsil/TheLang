@@ -29,7 +29,7 @@ namespace TheLang.Semantics
         protected abstract bool Visit(ASTStringLiteral node);
         protected abstract bool Visit(ASTStructType node);
         protected abstract bool Visit(TupleLiteral node);
-        protected abstract bool Visit(ASTProcedureLiteral node);
+        protected abstract bool Visit(ASTLambda node);
         protected abstract bool Visit(ASTStructInitializer node);
 
         protected abstract bool Visit(ASTAdd node);

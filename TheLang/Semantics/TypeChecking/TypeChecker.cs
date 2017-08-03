@@ -46,7 +46,7 @@ namespace TheLang.Semantics.TypeChecking
             return true;
         }
 
-        protected override bool Visit(ASTProcedureLiteral node)
+        protected override bool Visit(ASTLambda node)
         {
             _symbolTable.Push(new Dictionary<string, TypeInfo>());
 

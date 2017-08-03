@@ -37,6 +37,9 @@
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.ValueTuple, Version=4.0.2.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.ValueTuple.4.4.0-preview2-25405-01\lib\netstandard1.0\System.ValueTuple.dll</HintPath>
+    </Reference>
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -50,7 +53,7 @@
     <Compile Include="AST\Expressions\Types\ASTPointerType.cs" />
     <Compile Include="AST\Expressions\Types\ASTProcedureType.cs" />
     <Compile Include="AST\Expressions\Types\ASTStructType.cs" />
-    <Compile Include="AST\Expressions\Literals\ASTProcedureLiteral.cs" />
+    <Compile Include="AST\Expressions\ASTLambda.cs" />
     <Compile Include="AST\Expressions\ASTStructInitializer.cs" />
     <Compile Include="AST\Expressions\Literals\ASTFloatLiteral.cs" />
     <Compile Include="AST\Expressions\Literals\ASTIntegerLiteral.cs" />
@@ -98,6 +101,8 @@
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Syntax\Associativity.cs" />
+    <Compile Include="AST\Expressions\ASTEmptyInitializer.cs" />
+    <Compile Include="AST\Expressions\ASTArrayInitializer.cs" />
     <Compile Include="Syntax\OpInfo.cs" />
     <Compile Include="Syntax\Parser.cs" />
     <Compile Include="Syntax\Position.cs" />
@@ -109,6 +114,10 @@
     <None Include="App.config" />
     <None Include="Examples\Syntax.tl" />
     <None Include="packages.config" />
+    <None Include="Std\Build.tl" />
+    <None Include="Std\BuiltIns.md" />
+    <None Include="Std\Error.tl" />
+    <None Include="Std\Types.tl" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

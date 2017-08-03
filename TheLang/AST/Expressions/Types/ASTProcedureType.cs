@@ -6,13 +6,12 @@ namespace TheLang.AST.Expressions.Types
 {
     public class ASTProcedureType : ASTNode
     {
-        public ASTProcedureType(Position position, bool isFunction)
+        public ASTProcedureType(Position position)
             : base(position)
         {
-            IsFunction = isFunction;
         }
-        
-        public bool IsFunction { get; set; }
+
+        public ASTNode Return { get; set; }
         public IEnumerable<ASTNode> Arguments { get; set; }
     }
 }

@@ -1,8 +1,9 @@
 ﻿using System.Collections.Generic;
 using TheLang.AST.Bases;
+using TheLang.AST.Expressions.Operators.Binary;
 using TheLang.Syntax;
 
-namespace TheLang.AST.Expressions.Literals
+namespace TheLang.AST.Expressions
 {
     public class ASTStructInitializer : ASTUnaryNode
     {
@@ -10,6 +11,6 @@ namespace TheLang.AST.Expressions.Literals
             : base(position)
         { }
         
-        public IEnumerable<ASTNode> Values { get; set; }
+        public IEnumerable<ASTEqual> Values { get; set; }
     }
 }

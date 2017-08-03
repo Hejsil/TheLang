@@ -10,7 +10,7 @@ namespace TheLang.AST.Bases
             Position = position;
         }
 
-        public Position Position { get; }
+        public Position Position { get; set; }
         public TypeInfo Type { get; set; }
     }
 }

@@ -11,6 +11,17 @@ namespace TheLang.AST.Expressions.Types
             : base(position)
         { }
 
-        public IEnumerable<ASTDeclaration> Fields { get; set; }
+        public IEnumerable<Field> Fields { get; set; }
+
+        public class Field : ASTNode
+        {
+            public Field(Position position) 
+                : base(position)
+            { }
+
+            public IEnumerable<ASTSymbol> Symbols { get; set; }
+            public ASTNode Type { get; set; }
+            public ASTNode DefaultValue { get; set; }
+        }
     }
 }
