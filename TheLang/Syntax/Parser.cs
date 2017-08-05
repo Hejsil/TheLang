@@ -2,7 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Security.AccessControl;
+using PeterO.Numbers;
 using TheLang.AST;
 using TheLang.AST.Bases;
 using TheLang.AST.Expressions;
@@ -89,9 +91,9 @@ namespace TheLang.Syntax
         /// 
         /// 
         /// ASTDeclaration syntax:
-        ///   ASTDeclaration -> var Identifier ":" Type
+        ///   ASTDeclaration -> var Identifier ":" TypeInfo
         ///                | (const | var) Identifier "=" Expression
-        ///                | (const | var) Identifier ":" Type "=" Expression
+        ///                | (const | var) Identifier ":" TypeInfo "=" Expression
         /// 
         /// </summary>
         /// <returns></returns>
@@ -100,7 +102,7 @@ namespace TheLang.Syntax
             var start = PeekToken();
             if (!EatToken(TokenKind.KeywordVar) && !EatToken(TokenKind.KeywordConst))
             {
-                ErrorHere(start.Position,
+                Error(start.Position,
                     $"Was trying to parse a ASTDeclaration and expected an {TokenKind.KeywordConst} or {TokenKind.KeywordVar}, but got {start.Kind}.");
                 return null;
             }
@@ -130,7 +132,7 @@ namespace TheLang.Syntax
 
             if (start.Kind == TokenKind.KeywordConst)
             {
-                ErrorHere(start.Position, $"A declarations cannot be marked const, without being initialized to a value");
+                Error(start.Position, $"A declarations cannot be marked const, without being initialized to a value");
                 return null;
             }
 
@@ -150,107 +152,19 @@ namespace TheLang.Syntax
         /// <returns></returns>
         private ASTNode ParseExpression()
         {
-
             var top = ParseUnary();
             if (top == null) return null;
 
-            var unaries = new List<ASTNode>();
-            var binaries = ParseMany(IsBinaryOperator, () =>
-            {
-                var op = MakeBinaryOperator(EatenToken);
-
-                var right = ParseUnary();
-                if (right == null) return null;
-                unaries.Add(right);
-
-                return op;
-            });
-
-            if (binaries == null) return null;
-
-            // TODO: Do the precedence thing
-            foreach (var (binary, unary) in binaries.Zip(unaries, (binary, unary) => (binary, unary)))
-            {
-                OperatorInfo.TryGetValue(top.GetType(),    out var topInfo);
-                OperatorInfo.TryGetValue(binary.GetType(), out var binaryInfo);
-                OperatorInfo.TryGetValue(unary.GetType(),  out var unaryInfo);
-
-
-            }
-
-            // TODO: This is close, but no quite correct
             while (EatToken(IsBinaryOperator))
             {
                 var op = MakeBinaryOperator(EatenToken);
 
                 var right = ParseUnary();
-                if (right == null)
-                    return null;
-
-                OpInfo opInfo;
-                if (!OperatorInfo.TryGetValue(op.GetType(), out opInfo))
-                {
-                    // TODO: Better error
-                    _compiler.ReportError(op.Position, $"Internal parser Error");
-                    return null;
-                }
-
-                ASTNode prev = null;
-                var current = top;
-                OpInfo currentInfo;
-
-                // The loop that ensures that the operators upholds their priority.
-                while (OperatorInfo.TryGetValue(current.GetType(), out currentInfo) &&
-                       opInfo.Priority <= currentInfo.Priority)
-                {
-                    var unary = current as ASTUnaryNode;
-                    var binary = current as ASTBinaryNode;
-
-                    if (unary != null)
-                    {
-                        if (opInfo.Priority == currentInfo.Priority)
-                            break;
-
-                        prev = current;
-                        current = unary.Child;
-                    }
-                    else if ((opInfo.Priority != currentInfo.Priority ||
-                             opInfo.Associativity == Associativity.RightToLeft) &&
-                             binary != null)
-                    {
-                        prev = current;
-                        current = binary.Right;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-
-                if (op is ASTDot && !(right is ASTSymbol))
-                {
-                    // TODO: Better error
-                    _compiler.ReportError(right.Position,
-                        "The right side of the dot operator can only by a symbol.");
-                    return null;
-                }
+                if (right == null)  return null;
 
                 op.Right = right;
-                op.Left = current;
-
-                {
-                    var unary = prev as ASTUnaryNode;
-                    var binary = prev as ASTBinaryNode;
-
-                    if (unary != null)
-                        unary.Child = op;
-                    else if (binary != null)
-                        binary.Right = op;
-                    else
-                        prev = op;
-                }
-
-                top = prev;
+                op.Left = top;
+                top = op;
             }
 
             return top;
@@ -270,140 +184,87 @@ namespace TheLang.Syntax
         /// <returns></returns>
         private ASTNode ParseUnary()
         {
-            var prefixOperators = ParseMany(token => !IsUnaryOperator(token), () =>
+            (ASTUnaryNode top, ASTUnaryNode leaf) GetPrefix()
             {
-                // ParseMany, will loop and eat tokens. We can therefor expect that IsUnaryOperator(EatenToken) == true 
-                return MakeUnaryOperator(EatenToken);
-            });
+                if (!EatToken(IsUnaryOperator)) return (null, null);
 
-            // This should never happen, but we check this for future proofness
-            if (prefixOperators == null) return null;
-            
-            var top = ParseTerm();
-            if (top == null) return null;
+                var unaryTop = MakeUnaryOperator(EatenToken);
+                var (child, unaryLeaf) = GetPrefix();
+                unaryTop.Child = child;
 
-            var postfixOperators = ParseMany<ASTUnaryNode>(
-                token => token != TokenKind.CurlyLeft &&
-                         token != TokenKind.ParenthesesLeft &&
-                         token != TokenKind.SquareLeft,
-                () =>
+                if (unaryLeaf == null) unaryLeaf = unaryTop;
+                return (unaryTop, unaryLeaf);
+            }
+
+            (ASTNode top, ASTUnaryNode leaf) = GetPrefix();
+            var term = ParseTerm();
+            if (term == null) return null;
+
+            if (top == null)
+                top = term;
+            else
+                leaf.Child = term;
+
+            while (EatToken(t => t == TokenKind.CurlyLeft ||
+                                 t == TokenKind.ParenthesesLeft || 
+                                 t == TokenKind.SquareLeft))
+            {
+                if (EatenToken.Kind == TokenKind.CurlyLeft)
                 {
-                    if (EatenToken.Kind == TokenKind.CurlyLeft)
+
+                    // ASTStructInitializer -> "{" ( Identifier "=" Expression )+ "}"
+                    if (PeekTokenIs(TokenKind.Identifier) && PeekTokenIs(TokenKind.Equal, 1))
                     {
-                        // ASTEmptyInitializer -> "{" "}"
-                        if (EatToken(TokenKind.CurlyRight))
+                        ASTAssign ParseInitialized()
                         {
-                            return new ASTEmptyInitializer(null);
-                        }
+                            var ident = PeekToken();
+                            if (!Expect(TokenKind.Identifier)) return null;
+                            if (!Expect(TokenKind.Equal)) return null;
 
-                        // ASTStructInitializer -> "{" ( Identifier "=" Expression )+ "}"
-                        if (PeekTokenIs(TokenKind.Equal, 1))
-                        {
-                            ASTEqual ParseInitialized()
+                            var right = ParseExpression();
+                            if (right == null) return null;
+
+                            return new ASTAssign(null)
                             {
-                                var ident = PeekToken();
-                                if (!Expect(TokenKind.Identifier)) return null;
-                                if (!Expect(TokenKind.Equal)) return null;
-
-                                var right = ParseExpression();
-                                if (right == null) return null;
-
-                                return new ASTEqual(null)
-                                {
-                                    Left = new ASTSymbol(ident.Position, ident.Value),
-                                    Right = right
-                                };
-                            }
-
-                            var equals = ParseMany(TokenKind.CurlyRight, ParseInitialized);
-                            if (equals == null) return null;
-
-                            return new ASTStructInitializer(null) { Values = equals };
+                                Left = new ASTSymbol(ident.Position, ident.Value),
+                                Right = right
+                            };
                         }
 
-                        //   ASTArrayInitializer  -> "{" Expression+ "}"
+                        var equals = ParseMany(TokenKind.CurlyRight, ParseInitialized);
+                        if (equals == null) return null;
+
+                        top = new ASTStructInitializer(top.Position) {Child = top, Values = equals};
+                    }
+                    //   ASTArrayInitializer  -> "{" Expression+ "}"
+                    //   ASTEmptyInitializer  -> "{" "}"
+                    else
+                    {
                         var values = ParseMany(TokenKind.CurlyRight, ParseExpression);
                         if (values == null) return null;
 
-                        return new ASTArrayInitializer(null) { Values = values };
+                        if (values.Any())
+                            top = new ASTArrayInitializer(top.Position) {Child = top, Values = values};
+                        else
+                            top = new ASTEmptyInitializer(top.Position) {Child = top};
                     }
 
-                    //   ASTCall -> "(" ( Expression ( "," Expression )* )? ")"
-                    if (EatenToken.Kind == TokenKind.ParenthesesLeft)
-                    {
-                        var arguments = ParseMany(TokenKind.ParenthesesRight, TokenKind.Comma, ParseExpression);
-                        if (arguments == null) return null;
-
-                        return new ASTCall(null) { Arguments = arguments };
-                    }
-
-                    //   ASTIndexing -> "[" ( Expression ( "," Expression )* )? "]"
-                    if (EatToken(TokenKind.SquareLeft))
-                    {
-                        var arguments = ParseMany(TokenKind.SquareRight, TokenKind.Comma, ParseExpression);
-                        if (arguments == null) return null;
-
-                        return new ASTIndexing(null) { Arguments = arguments };
-                    }
-
-                    throw new NotImplementedException();
-                });
-
-            if (postfixOperators == null) return null;
-
-
-            // Reverse prefixOperators because of this:
-            // If we iterated in normal order and just set top to be the next in the iteration, then we flip the operators:
-            // @+-~ -> ~-+@
-            // This is not the case for our postfix operators
-            using (var prefixEnum = prefixOperators.Reverse().GetEnumerator())
-            using (var postfixEnum = postfixOperators.GetEnumerator())
-            {
-                postfixEnum.MoveNext();
-                prefixEnum.MoveNext();
-
-                while (prefixEnum.Current != null && postfixEnum.Current != null)
-                {
-                    var preCurrent = prefixEnum.Current;
-                    var postCurrent = postfixEnum.Current;
-                    OperatorInfo.TryGetValue(preCurrent.GetType(), out var preInfo);
-                    OperatorInfo.TryGetValue(postCurrent.GetType(), out var postInfo);
-
-                    if (preInfo.Priority > postInfo.Priority)
-                    {
-                        preCurrent.Child = top;
-                        top = preCurrent;
-
-                        prefixEnum.MoveNext();
-                    }
-                    else // We pick postfix, if their priorities are equal
-                    {
-                        postCurrent.Child = top;
-                        postCurrent.Position = top.Position; // Postfix operators have the position of their child
-                        top = postCurrent;
-
-                        postfixEnum.MoveNext();
-                    }
                 }
-
-                // TODO: Figure out if we can handle this in the main loop
-                while (prefixEnum.Current != null)
+                //   ASTIndexing -> "[" ( Expression ( "," Expression )* )? "]"
+                //   ASTCall -> "(" ( Expression ( "," Expression )* )? ")"
+                else
                 {
-                    var preCurrent = prefixEnum.Current;
-                    preCurrent.Child = top;
-                    top = preCurrent;
+                    var last = EatenToken.Kind == TokenKind.ParenthesesLeft
+                        ? TokenKind.ParenthesesRight
+                        : TokenKind.SquareRight;
 
-                    prefixEnum.MoveNext();
-                }
+                    var arguments = ParseMany(last, TokenKind.Comma, ParseExpression);
+                    if (arguments == null) return null;
 
-                while (postfixEnum.Current != null)
-                {
-                    var postCurrent = postfixEnum.Current;
-                    postCurrent.Child = top;
-                    postCurrent.Position = top.Position; // Postfix operators have the position of their child
-                    top = postCurrent;
+                    top = EatenToken.Kind == TokenKind.ParenthesesRight
+                        ? (ASTNode) new ASTCall(top.Position)     { Child = top, Arguments = arguments }
+                        : (ASTNode) new ASTIndexing(top.Position) { Child = top, Arguments = arguments };
 
-                    postfixEnum.MoveNext();
                 }
             }
 
@@ -419,9 +280,10 @@ namespace TheLang.Syntax
         ///         | String
         ///         | "(" Expression ")"
         ///         | Lambda
+        //          | CompilerIdentifier "(" ( Expression ( "," Expression )* )? ")"
         ///   
-        ///   Lambda -> KeywordProc "(" (Argument ( "," Argument )* )? ")" ( -> Type )? 
-        ///   Argument -> Identifier ":" Type ( "=" Expression )?
+        ///   Lambda -> KeywordProc "(" (Argument ( "," Argument )* )? ")" ( -> TypeInfo )? 
+        ///   Argument -> Identifier ":" TypeInfo ( "=" Expression )?
         /// 
         /// </summary>
         /// <returns></returns>
@@ -433,11 +295,11 @@ namespace TheLang.Syntax
 
             // FloatNumber
             if (EatToken(TokenKind.FloatNumber))
-                return new ASTFloatLiteral(EatenToken.Position, double.Parse(EatenToken.Value));
+                return new ASTFloatLiteral(EatenToken.Position, EDecimal.FromString(EatenToken.Value));
 
             // DecimalNumber
             if (EatToken(TokenKind.DecimalNumber))
-                return new ASTIntegerLiteral(EatenToken.Position, int.Parse(EatenToken.Value));
+                return new ASTIntegerLiteral(EatenToken.Position, EInteger.FromString(EatenToken.Value));
 
             // String
             if (EatToken(TokenKind.String))
@@ -453,7 +315,7 @@ namespace TheLang.Syntax
                 return Expect(TokenKind.ParenthesesRight) ? new ASTParentheses(start.Position) { Child = expression } : null;
             }
             
-            //   Lambda -> KeywordProc "(" (Argument ( "," Argument )* )? ")" ( -> Type )?
+            //   Lambda -> KeywordProc "(" (Argument ( "," Argument )* )? ")" ( -> TypeInfo )?
             if (EatToken(t => t == TokenKind.KeywordFunction || t == TokenKind.KeywordProcedure))
             {
                 var start = EatenToken;
@@ -477,7 +339,7 @@ namespace TheLang.Syntax
 
                     return new ASTLambda.Argument(ident.Position)
                     {
-                        Symbol = new ASTSymbol(ident.Position, ident.Value),
+                        Name = ident.Value,
                         Type = type,
                         DefaultValue = defaultValue
                     };
@@ -503,8 +365,23 @@ namespace TheLang.Syntax
                 };
             }
 
-            ErrorHere(peek => $"While parsing a term, the parser found an unexpected token: {peek.Kind}");
+            if (PeekTokenIs(TokenKind.CompilerIdentifier))
+                return ParseCompilerCall();
+
+            Error(peek => $"While parsing a term, the parser found an unexpected token: {peek.Kind}");
             return null;
+        }
+
+        private ASTCompilerCall ParseCompilerCall()
+        {
+            var ident = PeekToken();
+            if (!Expect(TokenKind.CompilerIdentifier) || !Expect(TokenKind.ParenthesesLeft))
+                return null;
+
+            var arguments = ParseMany(TokenKind.ParenthesesRight, TokenKind.Comma, ParseExpression);
+            if (arguments == null) return null;
+
+            return new ASTCompilerCall(ident.Position, ident.Value) { Arguments = arguments };
         }
 
         /// <summary>
@@ -542,8 +419,58 @@ namespace TheLang.Syntax
                 var statement = ParseExpression();
                 if (statement == null) return null;
                 
-                return isReturn ? new Return(returnToken.Position) { Child = statement } : statement;
+                return isReturn ? new ASTReturn(returnToken.Position) { Child = statement } : statement;
             }
+        }
+
+        /// <summary>
+        /// TypeInfo syntax:
+        ///   TypeInfo -> ("@" | "[" "]" ) TypeInfo
+        ///         | "proc" "(" ( TypeInfo ( "," TypeInfo )*)? ")" "->" TypeInfo
+        ///         | Identifier
+        /// </summary>
+        /// <returns></returns>
+        private ASTNode ParseType()
+        {
+            var start = PeekToken();
+
+            if (EatToken(TokenKind.Identifier))
+                return new ASTSymbol(start.Position, start.Value);
+
+            if (EatToken(TokenKind.At))
+            {
+                var subType = ParseType();
+                if (subType == null) return null;
+
+                return new ASTPointerType(start.Position) { Child = subType };
+            }
+
+            if (EatToken(TokenKind.SquareLeft))
+            {
+                if (!Expect(TokenKind.SquareRight)) return null;
+
+                var subType = ParseType();
+                if (subType == null) return null;
+
+                return new ASTArrayType(start.Position) { Child = subType };
+
+            }
+
+            if (EatToken(TokenKind.KeywordProcedure))
+            {
+                if (!Expect(TokenKind.ParenthesesLeft)) return null;
+
+                var types = ParseMany(TokenKind.ParenthesesRight, TokenKind.Comma, ParseType);
+                if (!Expect(TokenKind.Arrow)) return null;
+
+                var returnType = ParseType();
+                if (returnType == null) return null;
+
+                return new ASTProcedureType(start.Position) { Arguments = types, Return = returnType };
+            }
+
+            Error(start.Position, "");
+            return null;
         }
 
         private IEnumerable<T> ParseMany<T>(TokenKind end, Func<int, T> parseElement) => ParseMany(token => token == end, parseElement);
@@ -553,7 +480,7 @@ namespace TheLang.Syntax
             while (!EatToken(end))
             {
                 var element = parseElement(result.Count);
-                if (element.Equals(default(T))) return null;
+                if (Equals(element, default(T))) return null;
 
                 result.Add(element);
             }
@@ -582,23 +509,30 @@ namespace TheLang.Syntax
             });
         }
 
-        private void ErrorHere(Func<Token, string> errorBuilder)
+        private void Error(Func<Token, string> errorBuilder)
         {
             var peek = PeekToken();
-            _compiler.ReportError(peek.Position, errorBuilder(peek));
+            _compiler.ReportError(peek.Position, nameof(Parser), errorBuilder(peek));
         }
 
-        private void ErrorHere(Position position, string error)
+        private void Error(Position position, string error)
         {
-            _compiler.ReportError(position, error);
+            _compiler.ReportError(position, nameof(Parser), error);
         }
 
-        private bool Expect(TokenKind expected) => Expect(token => token == expected);
+        private bool Expect(TokenKind expected)
+        {
+            if (EatToken(expected)) return true;
+
+            Error(peek => $"Expected {expected}, but got {peek.Kind}");
+            return false;
+        }
+
         private bool Expect(Predicate<TokenKind> expected)
         {
             if (EatToken(expected)) return true;
 
-            ErrorHere(peek => $"Expected {expected}, but got {peek.Kind}");
+            Error(peek => $"Expected {expected}, but got {peek.Kind}");
             return false;
         }
 

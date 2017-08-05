@@ -1,4 +1,5 @@
 ﻿using TheLang.Semantics.TypeChecking;
+using TheLang.Semantics.TypeChecking.Types;
 using TheLang.Syntax;
 
 namespace TheLang.AST.Bases
@@ -11,6 +12,6 @@ namespace TheLang.AST.Bases
         }
 
         public Position Position { get; set; }
-        public TypeInfo Type { get; set; }
+        public BaseType TypeInfo { get; set; }
     }
 }

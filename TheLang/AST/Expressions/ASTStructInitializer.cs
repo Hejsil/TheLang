@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using TheLang.AST.Bases;
 using TheLang.AST.Expressions.Operators.Binary;
+using TheLang.AST.Statments;
 using TheLang.Syntax;
 
 namespace TheLang.AST.Expressions
@@ -11,6 +12,6 @@ namespace TheLang.AST.Expressions
             : base(position)
         { }
         
-        public IEnumerable<ASTEqual> Values { get; set; }
+        public IEnumerable<ASTAssign> Values { get; set; }
     }
 }

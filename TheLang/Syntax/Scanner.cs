@@ -88,17 +88,15 @@ namespace TheLang.Syntax
                 return new Token(position, TokenKind.UAt);
             }
 
-            if (EatChar(c => char.IsLetter(c) || c == '_') )
+            if (EatChar(c => char.IsLetter(c) || c == '_'))
             {
                 while (EatChar(c => char.IsLetterOrDigit(c) || c == '_')) { }
 
                 var resultStr = GetValue(startIndex);
 
-                TokenKind kind;
-                if (_keywords.TryGetValue(resultStr, out kind))
-                    return new Token(position, kind);
-
-                return new Token(position, TokenKind.Identifier, resultStr);
+                return _keywords.TryGetValue(resultStr, out var kind) ? 
+                    new Token(position, kind) : 
+                    new Token(position, TokenKind.Identifier, resultStr);
             }
 
             if (EatChar(char.IsDigit))
@@ -185,6 +183,13 @@ namespace TheLang.Syntax
                     }
 
                     return new Token(position, TokenKind.String, GetValue(startIndex + 1, -1));
+
+                case '#':
+                    // A CompilerIdentifier needs at least on letter at the start, so we enforce that here
+                    if (!EatChar(char.IsLetter)) return new Token(position, TokenKind.Unknown, GetValue(startIndex));
+
+                    while (EatChar(c => char.IsLetterOrDigit(c) || c == '_')) { }
+                    return new Token(position, TokenKind.CompilerIdentifier, GetValue(startIndex + 1));
                 default:
                     return new Token(position, TokenKind.Unknown, GetValue(startIndex));
             }

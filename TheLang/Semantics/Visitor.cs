@@ -16,10 +16,9 @@ namespace TheLang.Semantics
     public abstract class Visitor
     {
         public bool Visit(dynamic node) => Visit(node);
-
-        protected abstract bool Visit(Assign node);
+        
         protected abstract bool Visit(ASTDeclaration node);
-        protected abstract bool Visit(Return node);
+        protected abstract bool Visit(ASTReturn node);
         protected abstract bool Visit(ASTVariable node);
 
         protected abstract bool Visit(ASTFloatLiteral node);
@@ -28,9 +27,11 @@ namespace TheLang.Semantics
         protected abstract bool Visit(ASTProcedureType node);
         protected abstract bool Visit(ASTStringLiteral node);
         protected abstract bool Visit(ASTStructType node);
-        protected abstract bool Visit(TupleLiteral node);
         protected abstract bool Visit(ASTLambda node);
+        protected abstract bool Visit(ASTLambda.Argument node);
         protected abstract bool Visit(ASTStructInitializer node);
+        protected abstract bool Visit(ASTEmptyInitializer node);
+        protected abstract bool Visit(ASTArrayInitializer node);
 
         protected abstract bool Visit(ASTAdd node);
         protected abstract bool Visit(ASTAnd node);
@@ -50,31 +51,21 @@ namespace TheLang.Semantics
 
         protected abstract bool Visit(ASTArrayType node);
         protected abstract bool Visit(ASTCall node);
+        protected abstract bool Visit(ASTCompilerCall node);
         protected abstract bool Visit(ASTDereference node);
         protected abstract bool Visit(ASTIndexing node);
         protected abstract bool Visit(ASTNegative node);
         protected abstract bool Visit(ASTNot node);
         protected abstract bool Visit(ASTPositive node);
         protected abstract bool Visit(ASTReference node);
-        protected abstract bool Visit(UniqueReference node);
 
         protected abstract bool Visit(ASTSymbol node);
 
-        protected virtual bool Visit(ASTProgramNode node) => VisitCollection(node.Files);
-        protected virtual bool Visit(ASTFileNode node) => VisitCollection(node.Declarations);
-        protected virtual bool Visit(ASTCodeBlock node) => VisitCollection(node.Statements);
+        protected virtual bool Visit(ASTProgramNode node) => Visit(node.Files);
+        protected virtual bool Visit(ASTFileNode node) => Visit(node.Declarations);
+        protected virtual bool Visit(ASTCodeBlock node) => Visit(node.Statements);
 
-        protected bool VisitCollection<T>(IEnumerable<T> nodes) where T : ASTNode
-        {
-            var succes = true;
-
-            foreach (var node in nodes)
-            {
-                if (!Visit(node))
-                    succes = false;
-            }
-
-            return succes;
-        }
+        protected bool Visit<T>(params T[] nodes) where T : ASTNode => Visit((IEnumerable<T>) nodes);
+        protected bool Visit<T>(IEnumerable<T> nodes) where T : ASTNode => nodes.All(Visit);
     }
 }

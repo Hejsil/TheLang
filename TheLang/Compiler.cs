@@ -56,17 +56,17 @@ namespace TheLang
                 _filesToCompile.Enqueue(fileName);
         }
 
-        public void ReportError(Position position, string message, string hint)
+        public void ReportError(Position position, string sender, string message, string hint)
         {
             Console.Error.WriteLine(
-                $"Error at {position.FileName}:{position.Line}:{position.Column}: {message}\n" +
+                $"Error at {position.FileName}:{position.Line}:{position.Column}: {sender}: {message}\n" +
                 $"\tHint: {hint}");
         }
 
-        public void ReportError(Position position, string message)
+        public void ReportError(Position position, string sender, string message)
         {
             Console.Error.WriteLine(
-                $"Error at {position.FileName}:{position.Line}:{position.Column}: {message}");
+                $"Error at {position.FileName}:{position.Line}:{position.Column}: {sender}: {message}");
         }
 
         private bool ParserLoop(ICollection<ASTFileNode> result)

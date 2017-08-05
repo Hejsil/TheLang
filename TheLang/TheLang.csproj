@@ -32,22 +32,25 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="HashCalculator, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\packages\HashCodeGenerator.1.0.1\lib\HashCalculator.dll</HintPath>
+    <Reference Include="FsMpir.NET, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Mpir.NET.0.4.0\lib\net40\FsMpir.NET.dll</HintPath>
+    </Reference>
+    <Reference Include="Mpir.NET, Version=0.4.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Mpir.NET.0.4.0\lib\net40\Mpir.NET.dll</HintPath>
+    </Reference>
+    <Reference Include="Numbers, Version=0.4.0.0, Culture=neutral, PublicKeyToken=9cd62db60ea5554c, processorArchitecture=MSIL">
+      <HintPath>..\packages\PeterO.Numbers.0.4.0\lib\portable-net45+dnxcore50+netcore45+win+wpa81+wp80\Numbers.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Numerics" />
     <Reference Include="System.ValueTuple, Version=4.0.2.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\System.ValueTuple.4.4.0-preview2-25405-01\lib\netstandard1.0\System.ValueTuple.dll</HintPath>
     </Reference>
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Net.Http" />
-    <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AST\Expressions\ASTCompilerCall.cs" />
     <Compile Include="AST\Bases\ASTBinaryNode.cs" />
     <Compile Include="AST\Expressions\Literals\ASTInfer.cs" />
     <Compile Include="AST\Expressions\Types\ASTPointerType.cs" />
@@ -84,12 +87,22 @@
     <Compile Include="AST\Expressions\Operators\Unary\ASTReference.cs" />
     <Compile Include="AST\Expressions\ASTSymbol.cs" />
     <Compile Include="AST\ASTFileNode.cs" />
-    <Compile Include="AST\Statments\Assign.cs" />
-    <Compile Include="AST\Statments\Return.cs" />
+    <Compile Include="AST\Statments\ASTAssign.cs" />
+    <Compile Include="AST\Statments\ASTReturn.cs" />
+    <Compile Include="Semantics\TypeChecking\Scope.cs" />
     <Compile Include="Semantics\TypeChecking\TypeChecker.cs" />
-    <Compile Include="Semantics\TypeChecking\TypeId.cs" />
-    <Compile Include="Semantics\TypeChecking\TypeInfo.cs" />
-    <Compile Include="Semantics\TypeChecking\TypeInfoStruct.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\ArrayType.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\BooleanType.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\FloatType.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\IntegerType.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\BaseType.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\NameableType.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\PointerType.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\ProcedureType.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\StringType.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\TypeType.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\UnknownType.cs" />
+    <Compile Include="Semantics\TypeChecking\Types\VoidType.cs" />
     <Compile Include="Semantics\Visitor.cs" />
     <Compile Include="AST\Bases\ASTNode.cs" />
     <Compile Include="AST\ASTProgramNode.cs" />
@@ -109,6 +122,8 @@
     <Compile Include="Syntax\Scanner.cs" />
     <Compile Include="Syntax\Token.cs" />
     <Compile Include="Syntax\TokenKind.cs" />
+    <Compile Include="Util\ENumbers.cs" />
+    <Compile Include="Util\Generic.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

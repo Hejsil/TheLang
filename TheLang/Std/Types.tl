@@ -12,11 +12,11 @@ const U64  = #integer_type(64, true)
 const U128 = #integer_type(128, true)
 
 // Note: We should probably have #nan(Fx) and #inf(Fx), as these might have different bit patterns depending on the type
-const F8    = #float_type(8) // TODO: Figure out if we can even have 8 and 16 bit floats
-const F16   = #float_type(16)
+//const F8    = #float_type(8) // TODO: Figure out if we can even have 8 and 16 bit floats
+//const F16   = #float_type(16)
 const F32   = #float_type(32)
 const F64   = #float_type(64)
-const F128  = #float_type(128)
+//const F128  = #float_type(128)
 
 const Boolean = enum: U8 {
 	True  = 1

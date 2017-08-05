@@ -3,9 +3,9 @@ using TheLang.Syntax;
 
 namespace TheLang.AST.Statments
 {
-    public class Return : ASTUnaryNode
+    public class ASTReturn : ASTUnaryNode
     {
-        public Return(Position position)
+        public ASTReturn(Position position)
             : base(position)
         { }
     }

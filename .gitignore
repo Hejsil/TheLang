@@ -261,3 +261,6 @@ __pycache__/
 *.pyc
 /TheLang/.OBeautifulCode.Recipes/OBeautifulCode.Math/HashCodeHelper.cs
 /TheLang/.OBeautifulCode.Recipes/OBeautifulCode.Math/HashCodeHelper.cs
+/TheLang/lib
+/TheLang/xmpir64.dll
+/TheLang/xmpir32.dll

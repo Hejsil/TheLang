@@ -4,6 +4,7 @@
     {
         // Unary operators
         ExclamationMark,
+        UAt,
         At,
         Tilde,
         And,
@@ -33,6 +34,7 @@
         ModulusEqual,
 
         Identifier,
+        CompilerIdentifier,
         FloatNumber,
         DecimalNumber,
         String,
@@ -66,6 +68,6 @@
         Comma,
 
         EndOfFile,
-        Unknown,
+        Unknown
     }
 }

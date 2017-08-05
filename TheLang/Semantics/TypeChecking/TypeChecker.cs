@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
+using System.Runtime.Hosting;
+using System.Runtime.Remoting.Messaging;
 using TheLang.AST;
 using TheLang.AST.Bases;
 using TheLang.AST.Expressions;
@@ -10,692 +12,637 @@ using TheLang.AST.Expressions.Operators.Binary;
 using TheLang.AST.Expressions.Operators.Unary;
 using TheLang.AST.Expressions.Types;
 using TheLang.AST.Statments;
+using TheLang.Semantics.TypeChecking.Types;
+using TheLang.Syntax;
+using TheLang.Util;
 
 namespace TheLang.Semantics.TypeChecking
 {
     public class TypeChecker : Visitor
     {
-        private readonly Dictionary<TypeInfoStruct, TypeInfo> _existingTypes =
-            new Dictionary<TypeInfoStruct, TypeInfo>(TypeInfoStruct.Comparer);
+        private class TypeCache
+        {
+            private readonly Dictionary<int, FloatType> _floatCache = new Dictionary<int, FloatType>();
+            private readonly Dictionary<(int, bool), IntegerType> _intCache = new Dictionary<(int, bool), IntegerType>();
+            private readonly Dictionary<BaseType, ArrayType> _arrayCache = new Dictionary<BaseType, ArrayType>();
+            private readonly Dictionary<BaseType, PointerType> _pointerCache = new Dictionary<BaseType, PointerType>();
+            private readonly Dictionary<BaseType, TypeType> _typeCache = new Dictionary<BaseType, TypeType>();
+            private readonly BooleanType _boolean = new BooleanType();
+            private readonly UnknownType _unknown = new UnknownType();
+            private readonly VoidType _void = new VoidType();
+            private readonly StringType _string = new StringType();
 
-        private readonly Stack<Dictionary<string, TypeInfo>> _symbolTable = new Stack<Dictionary<string, TypeInfo>>();
-        private readonly Stack<TypeInfo> _returnTypeStack = new Stack<TypeInfo>();
+            public ArrayType GetArray(BaseType elementTypes)
+            {
+                if (_arrayCache.TryGetValue(elementTypes, out var result)) return result;
+
+                result = new ArrayType(elementTypes);
+                _arrayCache.Add(elementTypes, result);
+                return result;
+            }
+
+            public PointerType GetPointer(BaseType elementTypes)
+            {
+                if (_pointerCache.TryGetValue(elementTypes, out var result)) return result;
+
+                result = new PointerType(elementTypes);
+                _pointerCache.Add(elementTypes, result);
+                return result;
+            }
+
+            public TypeType GetType(BaseType elementTypes)
+            {
+                if (_typeCache.TryGetValue(elementTypes, out var result)) return result;
+
+                result = new TypeType(elementTypes);
+                _typeCache.Add(elementTypes, result);
+                return result;
+            }
+
+            public FloatType GetFloat(int size)
+            {
+                if (_floatCache.TryGetValue(size, out var result)) return result;
+
+                result = new FloatType(size);
+                _floatCache.Add(size, result);
+                return result;
+            }
+
+            public IntegerType GetInt(int size, bool signed)
+            {
+                if (_intCache.TryGetValue((size, signed), out var result)) return result;
+
+                result = new IntegerType(size, signed);
+                _intCache.Add((size, signed), result);
+                return result;
+            }
+
+            public BooleanType GetBoolean() => _boolean;
+            public StringType GetString() => _string;
+            public UnknownType GetUnknown() => _unknown;
+            public VoidType GetVoid() => _void;
+        }
 
         private readonly Compiler _compiler;
+        private readonly TypeCache _cache = new TypeCache();
+        private readonly Stack<ASTLambda> _procedureStack = new Stack<ASTLambda>();
+        private Scope _scope = new Scope();
 
         public TypeChecker(Compiler compiler)
         {
             _compiler = compiler;
+
+            // Predefined types
+            _scope.TryAddSymbol("I64", _cache.GetType(_cache.GetInt(64, true)));
+            _scope.TryAddSymbol("F64", _cache.GetType(_cache.GetFloat(64)));
+            _scope.TryAddSymbol("String", _cache.GetType(_cache.GetString()));
+            _scope.TryAddSymbol("Type", _cache.GetType(_cache.GetType(_cache.GetUnknown())));
         }
 
-        protected override bool Visit(Return node)
+
+        protected override bool Visit(ASTDeclaration node)
         {
-            if (!Visit(node.Child))
+            if (!Visit(node.DeclaredType)) return false;
+
+            node.TypeInfo = node.DeclaredType.TypeInfo;
+
+            if (_scope.TryAddSymbol(node.Name, node.TypeInfo)) return true;
+
+            Error(node.Position, "");
+            return false;
+        }
+
+        protected override bool Visit(ASTReturn node)
+        {
+            if (!Visit(node.Child)) return false;
+
+            var lambda = _procedureStack.Peek();
+            var returnType = ((ProcedureType) lambda.TypeInfo).Return;
+            node.TypeInfo = node.Child.TypeInfo;
+
+            return Expect(node.Position, returnType, node.TypeInfo);
+        }
+
+        protected override bool Visit(ASTVariable node)
+        {
+            if (!Visit(node.Value, node.DeclaredType)) return false;
+
+            if (node.DeclaredType.TypeInfo is UnknownType)
+                node.DeclaredType.TypeInfo = node.Value.TypeInfo;
+            else if (!Expect(node.Position, node.DeclaredType.TypeInfo, node.Value.TypeInfo))
                 return false;
 
-            var returnType = _returnTypeStack.Peek();
-            var childType = node.Child.Type;
-            if (!childType.IsImplicitlyConvertibleTo(returnType))
-            {
-                _compiler.ReportError(node.Child.Position,
-                    $"Cannot return value of type {childType}. Procedure returns {returnType}.");
-                return false;
-            }
+            node.TypeInfo = node.DeclaredType.TypeInfo;
+            if (_scope.TryAddSymbol(node.Name, node.TypeInfo)) return true;
 
-            node.Type = returnType;
+            Error(node.Position, "");
+            return false;
+        }
+
+        protected override bool Visit(ASTFloatLiteral node)
+        {
+            node.TypeInfo = _cache.GetFloat(BaseType.UnknownSize);
             return true;
         }
 
-        protected override bool Visit(ASTLambda node)
+        protected override bool Visit(ASTInfer node)
         {
-            _symbolTable.Push(new Dictionary<string, TypeInfo>());
-
-            if (!VisitCollection(node.Arguments) || !Visit(node.Return))
-            {
-                _symbolTable.Pop();
-                return false;
-            }
-
-            var args = new List<TypeInfo>(node.Arguments.Select(a => a.Type)) { node.Return.Type };
-            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Procedure, args));
-            _returnTypeStack.Push(node.Return.Type);
-
-            var result = Visit(node.Block);
-            _symbolTable.Pop();
-            _returnTypeStack.Pop();
-
-            return result;
-        }
-
-        protected override bool Visit(ASTProgramNode node)
-        {
-            var int64 = GetTypeInfo(new TypeInfoStruct(TypeId.Integer, TypeInfo.Bit64));
-            var uint64 = GetTypeInfo(new TypeInfoStruct(TypeId.UInteger, TypeInfo.Bit64));
-            var float64 = GetTypeInfo(new TypeInfoStruct(TypeId.Float, TypeInfo.Bit64));
-            var bool8 = GetTypeInfo(new TypeInfoStruct(TypeId.Bool, TypeInfo.Bit8));
-
-            var top = new Dictionary<string, TypeInfo>()
-            {
-                { "Int", GetTypeInfo(new TypeInfoStruct(TypeId.Type, int64)) },
-                { "UInt", GetTypeInfo(new TypeInfoStruct(TypeId.Type, uint64)) },
-                { "Float", GetTypeInfo(new TypeInfoStruct(TypeId.Type, float64)) },
-                { "Bool", GetTypeInfo(new TypeInfoStruct(TypeId.Type, bool8)) },
-            };
-
-            _symbolTable.Push(top);
-            var result = base.Visit(node);
-            _symbolTable.Pop();
-
-            return result;
-        }
-
-        protected override bool Visit(ASTStringLiteral node)
-        {
-            var chr = GetTypeInfo(new TypeInfoStruct(TypeId.UInteger, TypeInfo.Bit8));
-            var pointer = GetTypeInfo(new TypeInfoStruct(TypeId.Pointer, chr));
-            var integer = GetTypeInfo(new TypeInfoStruct(TypeId.Integer, TypeInfo.Bit64));
-            var dataField = GetTypeInfo(new TypeInfoStruct(TypeId.Field, "data", pointer));
-            var lengthField = GetTypeInfo(new TypeInfoStruct(TypeId.Field, "length", integer));
-            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.String, chr, dataField, lengthField));
+            node.TypeInfo = _cache.GetUnknown();
             return true;
         }
 
         protected override bool Visit(ASTIntegerLiteral node)
         {
-            node.Type = GetTypeInfo(new TypeInfoStruct(node.Value < 0 ? TypeId.Number : TypeId.UNumber));
-            return true;
-        }
-
-        protected override bool Visit(ASTFloatLiteral node)
-        {
-            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Float));
-            return true;
-        }
-
-        protected override bool Visit(ASTArrayType node)
-        {
-            if (!Visit(node.Child))
-                return false;
-
-            var pointer = GetTypeInfo(new TypeInfoStruct(TypeId.Pointer, node.Child.Type));
-            var integer = GetTypeInfo(new TypeInfoStruct(TypeId.Integer, TypeInfo.Bit64));
-            var dataField = GetTypeInfo(new TypeInfoStruct(TypeId.Field, "data", pointer));
-            var lengthField = GetTypeInfo(new TypeInfoStruct(TypeId.Field, "length", integer));
-            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Array, node.Child.Type, dataField, lengthField));
-            return true;
-        }
-
-        protected override bool Visit(TupleLiteral node)
-        {
-            if (!VisitCollection(node.Items))
-                return false;
-
-            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Tuple, node.Items.Select(i => i.Type)));
-            return true;
-        }
-
-        protected override bool Visit(ASTVariable node)
-        {
-            if (!Visit(node.DeclaredType))
-                return false;
-            if (!Visit(node.Value))
-                return false;
-
-            var declaredType = node.DeclaredType.Type;
-
-            // If declarations type is null, then the type needs to be infered
-            if (declaredType == null)
-            {
-                node.Type = node.Value.Type;
-
-                if (node.Type.Id == TypeId.UNumber || node.Type.Id == TypeId.Number)
-                    node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Integer, TypeInfo.Bit64));
-            }
-            else if (declaredType.Id != TypeId.Type)
-            {
-                _compiler.ReportError(node.DeclaredType.Position,
-                    $"A variable can only be declared a Type, and not {declaredType.Id}.");
-                return false;
-            }
-            else
-            {
-                declaredType = declaredType.Children.First();
-                var valueType = node.Value.Type;
-
-                if (!valueType.IsImplicitlyConvertibleTo(declaredType))
-                {
-                    _compiler.ReportError(node.Position,
-                        $"{valueType.Id} is not assignable to {declaredType.Id}.");
-                    return false;
-                }
-
-                node.Type = declaredType;
-            }
-
-            var peekTable = _symbolTable.Peek();
-            if (peekTable.ContainsKey(node.Name))
-            {
-                _compiler.ReportError(node.Position,
-                    $"ASTVariable have already been declared in this scope.");
-                return false;
-            }
-
-            peekTable.Add(node.Name, node.Type);
-            return true;
-        }
-
-        protected override bool Visit(ASTInfer node) => true;
-
-        protected override bool Visit(Assign node)
-        {
-            throw new NotImplementedException();
-        }
-
-        protected override bool Visit(ASTDeclaration node)
-        {
-            if (!Visit(node.DeclaredType))
-                return false;
-
-            var declaredType = node.DeclaredType.Type;
-            if (declaredType.Id != TypeId.Type)
-            {
-                _compiler.ReportError(node.DeclaredType.Position,
-                    $"A variable can only be declared a Type, and not {declaredType}.");
-                return false;
-            }
-
-            node.Type = declaredType.Children.First();
-
-            var peekTable = _symbolTable.Peek();
-            if (peekTable.ContainsKey(node.Name))
-            {
-                _compiler.ReportError(node.Position,
-                    "ASTVariable have already been declared in this scope.");
-                return false;
-            }
-
-            peekTable.Add(node.Name, node.Type);
-            return true;
-        }
-
-
-        private bool VisitArithmeticOperators(ASTBinaryNode node)
-        {
-            if (!Visit(node.Left))
-                return false;
-            if (!Visit(node.Right))
-                return false;
-
-            var leftType = node.Left.Type;
-            var rightType = node.Right.Type;
-
-            if (leftType.IsImplicitlyConvertibleTo(rightType))
-                node.Type = rightType;
-            else if (rightType.IsImplicitlyConvertibleTo(leftType))
-                node.Type = leftType;
-            else
-            {
-                _compiler.ReportError(node.Position,
-                    $"Cannot apply ?? to {leftType} and {rightType}.");
-                return false;
-            }
-
-            switch (node.Type.Id)
-            {
-                case TypeId.UNumber:
-                case TypeId.Number:
-                case TypeId.Integer:
-                case TypeId.UInteger:
-                case TypeId.Float:
-                    return true;
-
-                default:
-                    _compiler.ReportError(node.Position,
-                        $"Cannot apply ?? to {leftType} and {rightType}.");
-                    return false;
-            }
-        }
-
-        private bool VisitEqualityOperators(ASTBinaryNode node)
-        {
-            if (!Visit(node.Left))
-                return false;
-            if (!Visit(node.Right))
-                return false;
-
-            var leftType = node.Left.Type;
-            var rightType = node.Right.Type;
-
-            if (!rightType.IsImplicitlyConvertibleTo(leftType) || !leftType.IsImplicitlyConvertibleTo(rightType))
-            {
-                _compiler.ReportError(node.Position,
-                    $"Cannot apply ?? to {leftType} and {rightType}.");
-                return false;
-            }
-
-            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Bool));
-            return true;
-        }
-
-        private bool VisitRelationalOperators(ASTBinaryNode node)
-        {
-            if (!Visit(node.Left))
-                return false;
-            if (!Visit(node.Right))
-                return false;
-
-            var leftType = node.Left.Type;
-            var rightType = node.Right.Type;
-            TypeInfo compare;
-
-            if (leftType.IsImplicitlyConvertibleTo(rightType))
-                compare = rightType;
-            else if (rightType.IsImplicitlyConvertibleTo(leftType))
-                compare = leftType;
-            else
-            {
-                _compiler.ReportError(node.Position,
-                    $"Cannot apply ?? to {leftType} and {rightType}.");
-                return false;
-            }
-
-            switch (compare.Id)
-            {
-                case TypeId.UNumber:
-                case TypeId.Number:
-                case TypeId.Integer:
-                case TypeId.UInteger:
-                case TypeId.Float:
-                    node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Bool));
-                    return true;
-
-                default:
-                    _compiler.ReportError(node.Position,
-                        $"Cannot apply ?? to {leftType} and {rightType}.");
-                    return false;
-            }
-        }
-
-        private bool VisitLogicalOperators(ASTBinaryNode node)
-        {
-            if (!Visit(node.Left))
-                return false;
-            if (!Visit(node.Right))
-                return false;
-
-            var leftType = node.Left.Type;
-            var rightType = node.Right.Type;
-
-            if (rightType.IsImplicitlyConvertibleTo(leftType))
-                node.Type = rightType;
-            else if (rightType.IsImplicitlyConvertibleTo(leftType))
-                node.Type = leftType;
-            else
-            {
-                _compiler.ReportError(node.Position,
-                    $"Cannot apply ?? to {leftType} and {rightType}.");
-                return false;
-            }
-
-            if (node.Type.Id == TypeId.Bool)
-                return true;
-
-            _compiler.ReportError(node.Position,
-                $"Cannot apply boolean operator to {leftType} and {rightType}.");
-            return false;
-        }
-
-        protected override bool Visit(UniqueReference node)
-        {
-            if (!Visit(node.Child))
-                return false;
-
-            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.UniquePointer, node.Child.Type));
-            return true;
-        }
-
-        protected override bool Visit(ASTSymbol node)
-        {
-            TypeInfo result;
-            if (TryFindSymbolTypeInfo(node.Name, out result))
-            {
-                node.Type = result;
-                return true;
-            }
-
-            // TODO: Figure out a dependency system, where the compiler returns to this point after the symbol have been resolved
-            _compiler.ReportError(node.Position, $"{node.Name} is not declared");
-            return false;
-        }
-
-        protected override bool Visit(ASTStructInitializer node)
-        {
-            if (!Visit(node.Child))
-                return false;
-            if (!VisitCollection(node.Values))
-                return false;
-
-
-
-            // TODO: Implement
-            _compiler.ReportError(node.Position, $"ASTNot Implemented");
-            return false;
-        }
-
-        protected override bool Visit(ASTAdd node)
-        {
-            return VisitArithmeticOperators(node);
-        }
-
-        protected override bool Visit(ASTAnd node)
-        {
-            return VisitLogicalOperators(node);
-        }
-
-        protected override bool Visit(ASTAs node)
-        {
-            if (!Visit(node.Left))
-                return false;
-            if (!Visit(node.Right))
-                return false;
-
-            var type = node.Right.Type;
-            if (type.Id != TypeId.Type)
-            {
-                // TODO: Error
-                _compiler.ReportError(node.Position, $"Right side of the as operator must be a type, but was {type}");
-                return false;
-            }
-
-            // TODO: Maybe check if we can even typecast to the type?
-            node.Type = type.Children.First();
-            return true;
-        }
-
-        protected override bool Visit(ASTDivide node)
-        {
-            return VisitArithmeticOperators(node);
-        }
-
-        protected override bool Visit(ASTDot node)
-        {
-            if (!Visit(node.Left))
-                return false;
-
-            var leftType = node.Left.Type;
-
-            var name = node.Right.Name;
-            var field = leftType.Children.FirstOrDefault(f => f.Id == TypeId.Field && f.Name == name);
-
-            if (field == null)
-            {
-                _compiler.ReportError(node.Position,
-                    $"{leftType} does not contain the field \"{name}\"");
-                return false;
-            }
-
-            node.Type = field.Children.First();
-            return true;
-        }
-
-        protected override bool Visit(ASTEqual node)
-        {
-            return VisitEqualityOperators(node);
-        }
-
-        protected override bool Visit(ASTGreaterThan node)
-        {
-            return VisitRelationalOperators(node);
-        }
-
-        protected override bool Visit(ASTGreaterThanEqual node)
-        {
-            return VisitRelationalOperators(node);
-        }
-
-        protected override bool Visit(ASTLessThan node)
-        {
-            return VisitRelationalOperators(node);
-        }
-
-        protected override bool Visit(ASTLessThanEqual node)
-        {
-            return VisitRelationalOperators(node);
-        }
-
-        protected override bool Visit(ASTModulo node)
-        {
-            return VisitArithmeticOperators(node);
-        }
-
-        protected override bool Visit(ASTNotEqual node)
-        {
-            return VisitEqualityOperators(node);
-        }
-
-        protected override bool Visit(ASTOr node)
-        {
-            return VisitLogicalOperators(node);
-        }
-
-        protected override bool Visit(ASTSub node)
-        {
-            return VisitArithmeticOperators(node);
-        }
-
-        protected override bool Visit(ASTTimes node)
-        {
-            return VisitArithmeticOperators(node);
-        }
-
-        protected override bool Visit(ASTStructType node)
-        {
-            if (!VisitCollection(node.Fields))
-                return false;
-
-            var fields = node.Fields
-                .Where(f => !(f is ASTVariable && ((ASTVariable)f).IsConstant))
-                .Select(f => GetTypeInfo(new TypeInfoStruct(TypeId.Field, f.Name, f.Type)));
-
-            var composit = GetTypeInfo(new TypeInfoStruct(TypeId.Struct, children: fields));
-            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Type, composit));
-            return true;
-        }
-
-        protected override bool Visit(ASTDereference node)
-        {
-            if (!Visit(node.Child))
-                return false;
-
-            var childType = node.Child.Type;
-            if (childType.Id != TypeId.Pointer && childType.Id != TypeId.UniquePointer)
-            {
-                _compiler.ReportError(node.Position, $"Cannot dereference {childType}.");
-                return false;
-            }
-
-            node.Type = childType.Children.First();
-            return true;
-        }
-
-        protected override bool Visit(ASTNegative node)
-        {
-            if (!Visit(node.Child))
-                return false;
-
-            var childType = node.Child.Type;
-
-            switch (childType.Id)
-            {
-                case TypeId.Float:
-                case TypeId.Number:
-                case TypeId.Integer:
-                    node.Type = childType;
-                    return true;
-                case TypeId.UNumber:
-                    node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Number));
-                    return true;
-                default:
-                    _compiler.ReportError(node.Position, $"Cannot take the negative value of {childType}.");
-                    return false;
-            }
-        }
-
-        protected override bool Visit(ASTNot node)
-        {
-            if (!Visit(node.Child))
-                return false;
-
-            var childType = node.Child.Type;
-            if (childType.Id != TypeId.Bool)
-            {
-                _compiler.ReportError(node.Position, $"Cannot negate {childType}.");
-                return false;
-            }
-
-            node.Type = childType;
-            return true;
-        }
-
-        protected override bool Visit(ASTPositive node)
-        {
-            if (!Visit(node.Child))
-                return false;
-
-            var childType = node.Child.Type;
-
-            switch (childType.Id)
-            {
-                case TypeId.Float:
-                case TypeId.Number:
-                case TypeId.UNumber:
-                case TypeId.Integer:
-                case TypeId.UInteger:
-                    break;
-                default:
-                    _compiler.ReportError(node.Position, $"Cannot apply unaryAst + on {childType}.");
-                    return false;
-            }
-
-            node.Type = childType;
-            return true;
-        }
-
-        protected override bool Visit(ASTReference node)
-        {
-            if (!Visit(node.Child))
-                return false;
-
-            node.Type = GetTypeInfo(new TypeInfoStruct(TypeId.Pointer, node.Child.Type));
-            return true;
-        }
-
-        protected override bool Visit(ASTIndexing node)
-        {
-            if (!Visit(node.Child))
-                return false;
-            if (!Visit(node.Argument))
-                return false;
-
-            var childType = node.Child.Type;
-            if (childType.Id != TypeId.Array || childType.Id != TypeId.String)
-            {
-                _compiler.ReportError(node.Position, $"Cannot index {childType}.");
-                return false;
-            }
-
-            var argumentType = node.Argument.Type;
-            if (argumentType.Id != TypeId.Integer && argumentType.Id != TypeId.UInteger)
-            {
-                // TODO: Error
-                _compiler.ReportError(node.Position, $"ASTIndexing does not take {argumentType} as an argument.");
-                return false;
-            }
-
-            // Array type info have child, which is not a field, that says what the childrens type is, without needing
-            // to find the field "data" and go through the pointer for this field
-            node.Type = childType.Children.First(field => field.Id != TypeId.Field);
-            return true;
-        }
-
-        protected override bool Visit(ASTCall node)
-        {
-            if (!Visit(node.Child))
-                return false;
-            if (!VisitCollection(node.Arguments))
-                return false;
-
-            var childType = node.Child.Type;
-            if (childType.Id != TypeId.Procedure && childType.Id != TypeId.Function)
-            {
-                _compiler.ReportError(node.Position, $"Cannot call {node.Type}.");
-                return false;
-            }
-
-            var actualArgCount = node.Arguments.Count();
-            var expectedArgCount = childType.Children.Count() - 1;
-            if (actualArgCount != expectedArgCount)
-            {
-                _compiler.ReportError(node.Position,
-                    $"Procedure takes {expectedArgCount} arguments, but was provide {actualArgCount}.");
-                return false;
-            }
-
-            var zip = node.Arguments.Zip(childType.Children, Tuple.Create);
-
-            var index = 1;
-            foreach (var tuple in zip)
-            {
-                var argument = tuple.Item1;
-                var expectedType = tuple.Item2;
-
-                var actualType = argument.Type;
-
-                if (!actualType.IsImplicitlyConvertibleTo(expectedType))
-                {
-                    _compiler.ReportError(argument.Position, $"Argument {index} was cannot be passed to procedure. Expected {expectedType}, but got {actualType}.");
-                    return false;
-                }
-
-                Debug.Assert(actualArgCount >= index);
-                index++;
-            }
-
-            node.Type = childType.Children.Last();
+            node.TypeInfo = _cache.GetInt(BaseType.UnknownSize, node.Value < 0);
             return true;
         }
 
         protected override bool Visit(ASTProcedureType node)
         {
-            if (!VisitCollection(node.Arguments))
-                return false;
+            var arguments = new List<ProcedureType.Argument>();
 
-            var kind = node.IsFunction ? TypeId.Function : TypeId.Procedure;
-            node.Type = GetTypeInfo(new TypeInfoStruct(kind, children: node.Arguments.Select(n => n.Type)));
+            foreach (var arg in node.Arguments)
+            {
+                if (!Visit(arg)) return false;
+                if (!(arg.TypeInfo is TypeType c) || c.Type.Equals(_cache.GetUnknown()))
+                {
+                    Error(arg.Position, "Argument did not specify a valid type.");
+                    return false;
+                }
+
+                arguments.Add(new ProcedureType.Argument(null, c.Type));
+            }
+
+            if (!Visit(node.Return)) return false;
+
+            // TODO: Cache procedure types?
+            node.TypeInfo = _cache.GetType(new ProcedureType(null, arguments, node.Return.TypeInfo));
             return true;
         }
 
-        private TypeInfo GetTypeInfo(TypeInfoStruct typeInfo)
+        protected override bool Visit(ASTStructType node)
         {
-            TypeInfo result;
-            if (_existingTypes.TryGetValue(typeInfo, out result))
-                return result;
-
-            var instance = typeInfo.Allocate();
-            _existingTypes.Add(typeInfo, instance);
-            return instance;
+            throw new NotImplementedException();
         }
 
-        private bool TryFindSymbolTypeInfo(string name, out TypeInfo result)
+        protected override bool Visit(ASTArrayType node)
         {
-            foreach (var table in _symbolTable)
+            if (!Visit(node.Child)) return false;
+
+            var childType = node.Child.TypeInfo;
+            if (!(childType is TypeType c) || c.Type.Equals(_cache.GetUnknown()))
             {
-                if (table.TryGetValue(name, out result))
-                    return true;
+                Error(node.Position, "Can only construct and array type, for compile time known types.");
+                return true;
             }
 
-            result = null;
+            node.TypeInfo = _cache.GetType(_cache.GetArray(c.Type));
+            return true;
+        }
+
+        protected override bool Visit(ASTStringLiteral node)
+        {
+            node.TypeInfo = new StringType();
+            return true;
+        }
+
+        protected override bool Visit(ASTLambda node)
+        {
+            _procedureStack.Push(node);
+            _scope = new Scope { Parent = _scope };
+
+            var arguments = new List<ProcedureType.Argument>(node.Arguments.Count());
+
+            foreach (var arg in node.Arguments)
+            {
+                if (!Visit(arg))
+                {
+                    _procedureStack.Pop();
+                    return false;
+                }
+
+                if (!(arg.TypeInfo is TypeType c) || c.Type.Equals(_cache.GetUnknown()))
+                {
+                    Error(arg.Position, "Argument did not specify a valid type.");
+                    return false;
+                }
+
+                _scope.TryAddSymbol(arg.Name, c.Type);
+                arguments.Add(new ProcedureType.Argument(arg.Name, c.Type));
+            }
+
+            var ret = node.Return;
+            if (ret == null)
+            {
+                node.TypeInfo = new ProcedureType(null, arguments, _cache.GetVoid());
+            }
+            else if (Visit(ret))
+            {
+                if (!(ret.TypeInfo is TypeType c) || c.Type.Equals(_cache.GetUnknown()))
+                {
+                    Error(ret.Position, "Return was not specified as a valid type.");
+                    return false;
+                }
+
+                node.TypeInfo = new ProcedureType(null, arguments, c.Type);
+            }
+            else
+            {
+                _procedureStack.Pop();
+                return false;
+            }
+
+            if (!Visit(node.Block))
+            {
+                _procedureStack.Pop();
+                return false;
+            }
+
+            _scope = _scope.Parent;
+            _procedureStack.Pop();
+            return true;
+        }
+
+        protected override bool Visit(ASTLambda.Argument node)
+        {
+            if (!Visit(node.Type)) return false;
+
+            if (node.DefaultValue != null)
+            {
+                if (!Visit(node.DefaultValue)) return false;
+                if (!Expect(node.Position, node.Type.TypeInfo, node.DefaultValue.TypeInfo)) return false;
+            }
+
+            node.TypeInfo = node.Type.TypeInfo;
+            return true;
+        }
+
+        protected override bool Visit(ASTStructInitializer node)
+        {
+            throw new NotImplementedException();
+        }
+
+        protected override bool Visit(ASTEmptyInitializer node)
+        {
+            throw new NotImplementedException();
+        }
+
+        protected override bool Visit(ASTArrayInitializer node)
+        {
+            throw new NotImplementedException();
+        }
+
+        protected override bool Visit(ASTAdd node) => VisitArethetic(node);
+        protected override bool Visit(ASTSub node) => VisitArethetic(node);
+        protected override bool Visit(ASTDivide node) => VisitArethetic(node);
+        protected override bool Visit(ASTTimes node) => VisitArethetic(node);
+
+        // TODO: Is this really correct? Does modulo types function as other arethmetic operators
+        protected override bool Visit(ASTModulo node) => VisitArethetic(node);
+
+        protected override bool Visit(ASTAnd node) => VisitAndOr(node);
+        protected override bool Visit(ASTOr node) => VisitAndOr(node);
+
+        private bool VisitAndOr(ASTBinaryNode node)
+        {
+            if (!Visit(node.Left, node.Right)) return false;
+            var left = node.Left.TypeInfo;
+            var right = node.Right.TypeInfo;
+
+            if (!(left is BooleanType && right is BooleanType))
+            {
+                Error(node.Position, $"Cannot add {left} and {right}");
+                return false;
+            }
+
+            node.TypeInfo = left;
+            return true;
+        }
+        
+        private bool VisitArethetic(ASTBinaryNode node)
+        {
+            if (!Visit(node.Left, node.Right)) return false;
+            var left = node.Left.TypeInfo;
+            var right = node.Right.TypeInfo;
+
+            if (CanImplecitCast(left, right))
+            {
+                node.TypeInfo = right;
+            }
+            else if (CanImplecitCast(right, left))
+            {
+                node.TypeInfo = left;
+            }
+
+            if (node.TypeInfo is IntegerType || node.TypeInfo is FloatType)
+                return true;
+
+            Error(node.Position, $"Cannot add {left} and {right}");
             return false;
         }
+
+        protected override bool Visit(ASTGreaterThan node)
+        {
+            if (!VisitArethetic(node)) return false;
+
+            node.TypeInfo = _cache.GetBoolean();
+            return true;
+        }
+
+        protected override bool Visit(ASTGreaterThanEqual node)
+        {
+            if (!VisitArethetic(node)) return false;
+
+            node.TypeInfo = _cache.GetBoolean();
+            return true;
+        }
+
+        protected override bool Visit(ASTLessThan node)
+        {
+            if (!VisitArethetic(node)) return false;
+
+            node.TypeInfo = _cache.GetBoolean();
+            return true;
+        }
+
+        protected override bool Visit(ASTLessThanEqual node)
+        {
+            if (!VisitArethetic(node)) return false;
+
+            node.TypeInfo = _cache.GetBoolean();
+            return true;
+        }
+
+        protected override bool Visit(ASTNotEqual node)
+        {
+            if (!Visit(node.Left, node.Right)) return false;
+            var left = node.Left.TypeInfo;
+            var right = node.Right.TypeInfo;
+
+            if (!left.Equals(right))
+            {
+                Error(node.Position, $"Cannot compare {left} and {right}");
+                return false;
+            }
+
+            node.TypeInfo = _cache.GetBoolean();
+            return true;
+        }
+
+        protected override bool Visit(ASTEqual node)
+        {
+            if (!Visit(node.Left, node.Right)) return false;
+            var left = node.Left.TypeInfo;
+            var right = node.Right.TypeInfo;
+
+            if (!left.Equals(right))
+            {
+                Error(node.Position, $"Cannot compare {left} and {right}");
+                return false;
+            }
+
+            node.TypeInfo = _cache.GetBoolean();
+            return true;
+        }
+
+
+        protected override bool Visit(ASTAs node)
+        {
+            if (!Visit(node.Left, node.Right)) return false;
+            if (!(node.Right.TypeInfo is TypeType c) || c.Type.Equals(_cache.GetUnknown()))
+            {
+                Error(node.Position, "Can only cast to compile time types");
+                return false;
+            }
+
+            node.TypeInfo = c.Type;
+            return true;
+        }
+
+        protected override bool Visit(ASTCompilerCall node)
+        {
+            if (!Visit(node.Arguments)) return false;
+            
+            var pCount = p.Arguments.Count();
+            var nCount = node.Arguments.Count();
+            if (pCount != nCount)
+            {
+                Error(node.Position, $"Procedure requires {pCount} arguments, but was giving {nCount}");
+                return false;
+            }
+
+            foreach (var (nArg, pArg) in node.Arguments.Zip(p.Arguments, (nArg, pArg) => (nArg, pArg)))
+            {
+                if (!CanImplecitCast(nArg.TypeInfo, pArg.Type))
+                {
+                    Error(node.Position, $"Passing wrong type to procedure, expected {pArg.Type}, but got {nArg.TypeInfo}.");
+                    return false;
+                }
+            }
+
+            node.TypeInfo = p.Return;
+            return true;
+        }
+
+        protected override bool Visit(ASTDereference node)
+        {
+            if (!Visit(node.Child)) return false;
+
+            var childType = node.Child.TypeInfo;
+            if (childType is PointerType p)
+            {
+                node.TypeInfo = p.RefersTo;
+                return true;
+            }
+
+            Error(node.Position, $"Can't dereference none pointer {childType}");
+            return false;
+        }
+
+        protected override bool Visit(ASTReference node)
+        {
+            if (!Visit(node.Child)) return false;
+            node.TypeInfo = _cache.GetPointer(node.TypeInfo);
+            return true;
+        }
+
+        protected override bool Visit(ASTIndexing node)
+        {
+            if (!Visit(node.Child))     return false;
+            if (!Visit(node.Arguments)) return false;
+
+            var childType = node.Child.TypeInfo;
+
+            if (!(childType is ArrayType a))
+            {
+                Error(node.Position, $"Can't index none array {childType}, yet");
+                return false;
+            }
+
+            var count = node.Arguments.Count();
+            if (count != 1)
+            {
+                Error(node.Position, $"Can't index none array {childType}, yet");
+                return false;
+            }
+
+            var first = node.Arguments.First();
+            if (!(first.TypeInfo is IntegerType))
+            {
+                Error(node.Position, "Can't index array with a none Interger value");
+                return false;
+            }
+
+            node.TypeInfo = a.ItemType;
+            return true;
+        }
+
+        protected override bool Visit(ASTCall node)
+        {
+            if (!Visit(node.Child)) return false;
+            if (!Visit(node.Arguments)) return false;
+
+            var childType = node.Child.TypeInfo;
+
+            if (!(childType is ProcedureType p))
+            {
+                Error(node.Position, $"Can't call none procedure {childType}");
+                return false;
+            }
+
+            var pCount = p.Arguments.Count();
+            var nCount = node.Arguments.Count();
+            if (pCount != nCount)
+            {
+                Error(node.Position, $"Procedure requires {pCount} arguments, but was giving {nCount}");
+                return false;
+            }
+
+            foreach (var (nArg, pArg) in node.Arguments.Zip(p.Arguments, (nArg, pArg) => (nArg, pArg)))
+            {
+                if (!CanImplecitCast(nArg.TypeInfo, pArg.Type))
+                {
+                    Error(node.Position, $"Passing wrong type to procedure, expected {pArg.Type}, but got {nArg.TypeInfo}.");
+                    return false;
+                }
+            }
+            
+            node.TypeInfo = p.Return;
+            return true;
+        }
+
+        protected override bool Visit(ASTNegative node)
+        {
+            if (!Visit(node.Child)) return false;
+
+            var childType = node.Child.TypeInfo;
+            if (childType is FloatType f)
+            {
+                node.TypeInfo = f;
+                return true;
+            }
+
+            if (childType is IntegerType i)
+            {
+                if (!i.Signed)
+                {
+                    if (i.Size != BaseType.UnknownSize)
+                    {
+                        Error(node.Position, $"Cannot negate {childType}");
+                        return false;
+                    }
+
+                    // If the size of the unsigned interger is unknown, then we are free to convert between signed and unsigned
+                    node.TypeInfo = _cache.GetInt(BaseType.UnknownSize, true);
+                    return true;
+                }
+
+                node.TypeInfo = i;
+                return true;
+            }
+
+            Error(node.Position, $"Cannot negate {childType}");
+            return false;
+        }
+
+        protected override bool Visit(ASTNot node)
+        {
+            if (!Visit(node.Child)) return false;
+
+            var childType = node.Child.TypeInfo;
+            if (!(childType is BooleanType))
+            {
+                Error(node.Position, $"Cannot not none Boolean type {childType}");
+                return false;
+            }
+
+            node.TypeInfo = childType;
+            return true;
+        }
+
+        protected override bool Visit(ASTPositive node)
+        {
+            if (!Visit(node.Child)) return false;
+
+            var childType = node.Child.TypeInfo;
+            if (childType is FloatType f)
+            {
+                node.TypeInfo = f;
+                return true;
+            }
+
+            if (childType is IntegerType i)
+            {
+                node.TypeInfo = i;
+                return true;
+            }
+
+            Error(node.Position, $"Cannot do unary positive on {childType}");
+            return false;
+        }
+
+        protected override bool Visit(ASTSymbol node)
+        {
+            if (_scope.TryGetTypeOf(node.Name, out var result))
+            {
+                node.TypeInfo = result;
+                return true;
+            }
+
+            Error(node.Position, $"Nothing defined called {node.Name}");
+            return false;
+        }
+
+
+        protected override bool Visit(ASTDot node)
+        {
+            throw new NotImplementedException();
+        }
+
+        private bool CanImplecitCast(BaseType type, BaseType cast)
+        {
+            if (type is IntegerType iType && cast is IntegerType iCast)
+            {
+                if (iType.Signed == iCast.Signed && iType.Size <= iCast.Size) return true;
+                return iType.Size == BaseType.UnknownSize && iCast.Signed;
+            }
+
+            if (type is FloatType fType && cast is FloatType fCast)
+            {
+                return fType.Size <= fCast.Size;
+            }
+
+            return type.Equals(cast);
+        }
+
+        private bool Expect(Position position, BaseType expected, BaseType actual)
+        {
+            if (expected.Equals(actual)) return true;
+
+            Error(position, $"Expected {expected}, but got {actual}.");
+            return false;
+        }
+
+        private void Error(Position position, string message) => _compiler.ReportError(position, nameof(TypeChecker), message);
     }
 }

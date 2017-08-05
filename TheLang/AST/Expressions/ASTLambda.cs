@@ -21,7 +21,7 @@ namespace TheLang.AST.Expressions
                 : base(position)
             { }
 
-            public ASTSymbol Symbol { get; set; }
+            public string Name { get; set; }
             public ASTNode Type { get; set; }
             public ASTNode DefaultValue { get; set; }
         }
