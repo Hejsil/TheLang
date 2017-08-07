@@ -90,6 +90,7 @@
     <Compile Include="AST\Statments\ASTAssign.cs" />
     <Compile Include="AST\Statments\ASTReturn.cs" />
     <Compile Include="Semantics\TypeChecking\Scope.cs" />
+    <Compile Include="Semantics\TypeChecking\TypeCache.cs" />
     <Compile Include="Semantics\TypeChecking\TypeChecker.cs" />
     <Compile Include="Semantics\TypeChecking\Types\ArrayType.cs" />
     <Compile Include="Semantics\TypeChecking\Types\BooleanType.cs" />

@@ -20,71 +20,9 @@ namespace TheLang.Semantics.TypeChecking
 {
     public class TypeChecker : Visitor
     {
-        private class TypeCache
-        {
-            private readonly Dictionary<int, FloatType> _floatCache = new Dictionary<int, FloatType>();
-            private readonly Dictionary<(int, bool), IntegerType> _intCache = new Dictionary<(int, bool), IntegerType>();
-            private readonly Dictionary<BaseType, ArrayType> _arrayCache = new Dictionary<BaseType, ArrayType>();
-            private readonly Dictionary<BaseType, PointerType> _pointerCache = new Dictionary<BaseType, PointerType>();
-            private readonly Dictionary<BaseType, TypeType> _typeCache = new Dictionary<BaseType, TypeType>();
-            private readonly BooleanType _boolean = new BooleanType();
-            private readonly UnknownType _unknown = new UnknownType();
-            private readonly VoidType _void = new VoidType();
-            private readonly StringType _string = new StringType();
-
-            public ArrayType GetArray(BaseType elementTypes)
-            {
-                if (_arrayCache.TryGetValue(elementTypes, out var result)) return result;
-
-                result = new ArrayType(elementTypes);
-                _arrayCache.Add(elementTypes, result);
-                return result;
-            }
-
-            public PointerType GetPointer(BaseType elementTypes)
-            {
-                if (_pointerCache.TryGetValue(elementTypes, out var result)) return result;
-
-                result = new PointerType(elementTypes);
-                _pointerCache.Add(elementTypes, result);
-                return result;
-            }
-
-            public TypeType GetType(BaseType elementTypes)
-            {
-                if (_typeCache.TryGetValue(elementTypes, out var result)) return result;
-
-                result = new TypeType(elementTypes);
-                _typeCache.Add(elementTypes, result);
-                return result;
-            }
-
-            public FloatType GetFloat(int size)
-            {
-                if (_floatCache.TryGetValue(size, out var result)) return result;
-
-                result = new FloatType(size);
-                _floatCache.Add(size, result);
-                return result;
-            }
-
-            public IntegerType GetInt(int size, bool signed)
-            {
-                if (_intCache.TryGetValue((size, signed), out var result)) return result;
-
-                result = new IntegerType(size, signed);
-                _intCache.Add((size, signed), result);
-                return result;
-            }
-
-            public BooleanType GetBoolean() => _boolean;
-            public StringType GetString() => _string;
-            public UnknownType GetUnknown() => _unknown;
-            public VoidType GetVoid() => _void;
-        }
+        private TypeCache Cache => _compiler.TypeCache;
 
         private readonly Compiler _compiler;
-        private readonly TypeCache _cache = new TypeCache();
         private readonly Stack<ASTLambda> _procedureStack = new Stack<ASTLambda>();
         private Scope _scope = new Scope();
 
@@ -93,10 +31,10 @@ namespace TheLang.Semantics.TypeChecking
             _compiler = compiler;
 
             // Predefined types
-            _scope.TryAddSymbol("I64", _cache.GetType(_cache.GetInt(64, true)));
-            _scope.TryAddSymbol("F64", _cache.GetType(_cache.GetFloat(64)));
-            _scope.TryAddSymbol("String", _cache.GetType(_cache.GetString()));
-            _scope.TryAddSymbol("Type", _cache.GetType(_cache.GetType(_cache.GetUnknown())));
+            _scope.TryAddSymbol("I64", Cache.GetType(Cache.GetInt(64, true)));
+            _scope.TryAddSymbol("F64", Cache.GetType(Cache.GetFloat(64)));
+            _scope.TryAddSymbol("String", Cache.GetType(Cache.GetString()));
+            _scope.TryAddSymbol("Type", Cache.GetType(Cache.GetType(Cache.GetUnknown())));
         }
 
 
@@ -141,19 +79,19 @@ namespace TheLang.Semantics.TypeChecking
 
         protected override bool Visit(ASTFloatLiteral node)
         {
-            node.TypeInfo = _cache.GetFloat(BaseType.UnknownSize);
+            node.TypeInfo = Cache.GetFloat(BaseType.UnknownSize);
             return true;
         }
 
         protected override bool Visit(ASTInfer node)
         {
-            node.TypeInfo = _cache.GetUnknown();
+            node.TypeInfo = Cache.GetUnknown();
             return true;
         }
 
         protected override bool Visit(ASTIntegerLiteral node)
         {
-            node.TypeInfo = _cache.GetInt(BaseType.UnknownSize, node.Value < 0);
+            node.TypeInfo = Cache.GetInt(BaseType.UnknownSize, node.Value < 0);
             return true;
         }
 
@@ -164,7 +102,7 @@ namespace TheLang.Semantics.TypeChecking
             foreach (var arg in node.Arguments)
             {
                 if (!Visit(arg)) return false;
-                if (!(arg.TypeInfo is TypeType c) || c.Type.Equals(_cache.GetUnknown()))
+                if (!(arg.TypeInfo is TypeType c) || c.Type.Equals(Cache.GetUnknown()))
                 {
                     Error(arg.Position, "Argument did not specify a valid type.");
                     return false;
@@ -176,7 +114,7 @@ namespace TheLang.Semantics.TypeChecking
             if (!Visit(node.Return)) return false;
 
             // TODO: Cache procedure types?
-            node.TypeInfo = _cache.GetType(new ProcedureType(null, arguments, node.Return.TypeInfo));
+            node.TypeInfo = Cache.GetType(new ProcedureType(null, arguments, node.Return.TypeInfo));
             return true;
         }
 
@@ -190,13 +128,13 @@ namespace TheLang.Semantics.TypeChecking
             if (!Visit(node.Child)) return false;
 
             var childType = node.Child.TypeInfo;
-            if (!(childType is TypeType c) || c.Type.Equals(_cache.GetUnknown()))
+            if (!(childType is TypeType c) || c.Type.Equals(Cache.GetUnknown()))
             {
                 Error(node.Position, "Can only construct and array type, for compile time known types.");
                 return true;
             }
 
-            node.TypeInfo = _cache.GetType(_cache.GetArray(c.Type));
+            node.TypeInfo = Cache.GetType(Cache.GetArray(c.Type));
             return true;
         }
 
@@ -221,7 +159,7 @@ namespace TheLang.Semantics.TypeChecking
                     return false;
                 }
 
-                if (!(arg.TypeInfo is TypeType c) || c.Type.Equals(_cache.GetUnknown()))
+                if (!(arg.TypeInfo is TypeType c) || c.Type.Equals(Cache.GetUnknown()))
                 {
                     Error(arg.Position, "Argument did not specify a valid type.");
                     return false;
@@ -234,11 +172,11 @@ namespace TheLang.Semantics.TypeChecking
             var ret = node.Return;
             if (ret == null)
             {
-                node.TypeInfo = new ProcedureType(null, arguments, _cache.GetVoid());
+                node.TypeInfo = new ProcedureType(null, arguments, Cache.GetVoid());
             }
             else if (Visit(ret))
             {
-                if (!(ret.TypeInfo is TypeType c) || c.Type.Equals(_cache.GetUnknown()))
+                if (!(ret.TypeInfo is TypeType c) || c.Type.Equals(Cache.GetUnknown()))
                 {
                     Error(ret.Position, "Return was not specified as a valid type.");
                     return false;
@@ -345,7 +283,7 @@ namespace TheLang.Semantics.TypeChecking
         {
             if (!VisitArethetic(node)) return false;
 
-            node.TypeInfo = _cache.GetBoolean();
+            node.TypeInfo = Cache.GetBoolean();
             return true;
         }
 
@@ -353,7 +291,7 @@ namespace TheLang.Semantics.TypeChecking
         {
             if (!VisitArethetic(node)) return false;
 
-            node.TypeInfo = _cache.GetBoolean();
+            node.TypeInfo = Cache.GetBoolean();
             return true;
         }
 
@@ -361,7 +299,7 @@ namespace TheLang.Semantics.TypeChecking
         {
             if (!VisitArethetic(node)) return false;
 
-            node.TypeInfo = _cache.GetBoolean();
+            node.TypeInfo = Cache.GetBoolean();
             return true;
         }
 
@@ -369,7 +307,7 @@ namespace TheLang.Semantics.TypeChecking
         {
             if (!VisitArethetic(node)) return false;
 
-            node.TypeInfo = _cache.GetBoolean();
+            node.TypeInfo = Cache.GetBoolean();
             return true;
         }
 
@@ -385,7 +323,7 @@ namespace TheLang.Semantics.TypeChecking
                 return false;
             }
 
-            node.TypeInfo = _cache.GetBoolean();
+            node.TypeInfo = Cache.GetBoolean();
             return true;
         }
 
@@ -401,7 +339,7 @@ namespace TheLang.Semantics.TypeChecking
                 return false;
             }
 
-            node.TypeInfo = _cache.GetBoolean();
+            node.TypeInfo = Cache.GetBoolean();
             return true;
         }
 
@@ -409,7 +347,7 @@ namespace TheLang.Semantics.TypeChecking
         protected override bool Visit(ASTAs node)
         {
             if (!Visit(node.Left, node.Right)) return false;
-            if (!(node.Right.TypeInfo is TypeType c) || c.Type.Equals(_cache.GetUnknown()))
+            if (!(node.Right.TypeInfo is TypeType c) || c.Type.Equals(Cache.GetUnknown()))
             {
                 Error(node.Position, "Can only cast to compile time types");
                 return false;
@@ -423,24 +361,17 @@ namespace TheLang.Semantics.TypeChecking
         {
             if (!Visit(node.Arguments)) return false;
             
-            var pCount = p.Arguments.Count();
-            var nCount = node.Arguments.Count();
-            if (pCount != nCount)
-            {
-                Error(node.Position, $"Procedure requires {pCount} arguments, but was giving {nCount}");
+            var success = CheckMany(
+                node.Position,
+                node.Arguments,
+                node.Procedure.Type.Arguments,
+                (actual, expected) => CanImplecitCast(actual.TypeInfo, expected.Type),
+                (actual, expected) => $"Procedure requires {expected} arguments, but was giving {actual}",
+                (actual, expected) => $"Passing wrong type to procedure, expected {expected.Type}, but got {actual.TypeInfo}.");
+
+            if (!success)
                 return false;
-            }
 
-            foreach (var (nArg, pArg) in node.Arguments.Zip(p.Arguments, (nArg, pArg) => (nArg, pArg)))
-            {
-                if (!CanImplecitCast(nArg.TypeInfo, pArg.Type))
-                {
-                    Error(node.Position, $"Passing wrong type to procedure, expected {pArg.Type}, but got {nArg.TypeInfo}.");
-                    return false;
-                }
-            }
-
-            node.TypeInfo = p.Return;
             return true;
         }
 
@@ -462,7 +393,7 @@ namespace TheLang.Semantics.TypeChecking
         protected override bool Visit(ASTReference node)
         {
             if (!Visit(node.Child)) return false;
-            node.TypeInfo = _cache.GetPointer(node.TypeInfo);
+            node.TypeInfo = Cache.GetPointer(node.TypeInfo);
             return true;
         }
 
@@ -510,22 +441,17 @@ namespace TheLang.Semantics.TypeChecking
                 return false;
             }
 
-            var pCount = p.Arguments.Count();
-            var nCount = node.Arguments.Count();
-            if (pCount != nCount)
-            {
-                Error(node.Position, $"Procedure requires {pCount} arguments, but was giving {nCount}");
-                return false;
-            }
 
-            foreach (var (nArg, pArg) in node.Arguments.Zip(p.Arguments, (nArg, pArg) => (nArg, pArg)))
-            {
-                if (!CanImplecitCast(nArg.TypeInfo, pArg.Type))
-                {
-                    Error(node.Position, $"Passing wrong type to procedure, expected {pArg.Type}, but got {nArg.TypeInfo}.");
-                    return false;
-                }
-            }
+            var success = CheckMany(
+                node.Position,
+                node.Arguments,
+                p.Arguments,
+                (actual, expected) => CanImplecitCast(actual.TypeInfo, expected.Type),
+                (actual, expected) => $"Procedure requires {expected} arguments, but was giving {actual}",
+                (actual, expected) => $"Passing wrong type to procedure, expected {expected.Type}, but got {actual.TypeInfo}.");
+
+            if (!success)
+                return false;
             
             node.TypeInfo = p.Return;
             return true;
@@ -553,7 +479,7 @@ namespace TheLang.Semantics.TypeChecking
                     }
 
                     // If the size of the unsigned interger is unknown, then we are free to convert between signed and unsigned
-                    node.TypeInfo = _cache.GetInt(BaseType.UnknownSize, true);
+                    node.TypeInfo = Cache.GetInt(BaseType.UnknownSize, true);
                     return true;
                 }
 
@@ -619,7 +545,35 @@ namespace TheLang.Semantics.TypeChecking
             throw new NotImplementedException();
         }
 
-        private bool CanImplecitCast(BaseType type, BaseType cast)
+        private bool CheckMany<T1, T2>(
+            Position position,
+            IEnumerable<T1> enu1, 
+            IEnumerable<T2> enu2,
+            Func<T1, T2, bool> check, 
+            Func<int, int, string> countErrorBuilder,
+            Func<T1, T2, string> checkErrorBuilder)
+        {
+            var c1 = enu1.Count();
+            var c2 = enu2.Count();
+            if (c1 != c2)
+            {
+                Error(position, countErrorBuilder(c1, c2));
+                return false;
+            }
+
+            foreach (var (e1, e2) in enu1.Zip(enu2, (e1, e2) => (e1, e2)))
+            {
+                if (!check(e1, e2))
+                {
+                    Error(position, checkErrorBuilder(e1, e2));
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool CanImplecitCast(BaseType type, BaseType cast)
         {
             if (type is IntegerType iType && cast is IntegerType iCast)
             {

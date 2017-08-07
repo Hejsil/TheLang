@@ -18,7 +18,7 @@ namespace TheLang.Syntax
 {
     public class Parser : Scanner
     {
-        public static readonly Dictionary<Type, OpInfo> OperatorInfo =
+        private static readonly Dictionary<Type, OpInfo> OperatorInfo =
             new Dictionary<Type, OpInfo>
         {
             { typeof(ASTParentheses),       new OpInfo(9, Associativity.LeftToRight) },
@@ -380,8 +380,11 @@ namespace TheLang.Syntax
 
             var arguments = ParseMany(TokenKind.ParenthesesRight, TokenKind.Comma, ParseExpression);
             if (arguments == null) return null;
+            if (_compiler.Functions.TryGetValue(ident.Value, out var builtIn))
+                return new ASTCompilerCall(ident.Position, builtIn) { Arguments = arguments };
 
-            return new ASTCompilerCall(ident.Position, ident.Value) { Arguments = arguments };
+            Error(ident.Position, $"#{ident.Value} is not a compile time procedure");
+            return null;
         }
 
         /// <summary>

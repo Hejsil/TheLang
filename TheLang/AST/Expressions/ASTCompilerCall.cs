@@ -6,13 +6,10 @@ namespace TheLang.AST.Expressions
 {
     public class ASTCompilerCall : ASTNode
     {
-        public ASTCompilerCall(Position position, string name)
-            : base(position)
-        {
-            Name = name;
-        }
+        public ASTCompilerCall(Position position, Compiler.BuiltIn procedure)
+            : base(position) => Procedure = procedure;
 
-        public string Name { get; set; }
+        public Compiler.BuiltIn Procedure { get; set; }
         public IEnumerable<ASTNode> Arguments { get; set; }
     }
 }

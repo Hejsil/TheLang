@@ -3,16 +3,55 @@ using System.Collections.Generic;
 using System.IO;
 using TheLang.AST;
 using TheLang.Semantics.TypeChecking;
+using TheLang.Semantics.TypeChecking.Types;
 using TheLang.Syntax;
 
 namespace TheLang
 {
     public class Compiler
     {
+        public class BuiltIn
+        {
+            public BuiltIn(Kind identifier, ProcedureType type)
+            {
+                Identifier = identifier;
+                Type = type;
+            }
+
+            public enum Kind
+            {
+                Print
+            }
+
+            public Kind Identifier { get; }
+            public ProcedureType Type { get; }
+        }
+
         public ASTProgramNode Tree { get; set; }
+
+        public Dictionary<string, BuiltIn> Functions { get; } = new Dictionary<string, BuiltIn>();
+
+        public TypeCache TypeCache { get; } = new TypeCache();
 
         private readonly HashSet<string> _filesInProject = new HashSet<string>();
         private readonly Queue<string> _filesToCompile = new Queue<string>();
+
+        public Compiler()
+        {
+            Functions.Add("print",
+                new BuiltIn(
+                    BuiltIn.Kind.Print,
+                    new ProcedureType(null,
+                        new []
+                        {
+                            new ProcedureType.Argument("format_string", TypeCache.GetString()),
+                            // TODO: Support argument formatting
+                        },
+                        TypeCache.GetVoid()
+                    )
+                )
+            );
+        }
 
         public bool ParseProgram(TextReader reader)
         {

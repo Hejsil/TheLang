@@ -10,10 +10,6 @@ namespace TheLang
     public class Program
     {
         private const string Test = @"
-const print := proc(i: I64) {
-
-}
-
 const main := proc(args: []String) {
     #print(""Hello World!"")
 }
@@ -26,7 +22,7 @@ const main := proc(args: []String) {
             using (var str = new StringReader(Test))
                 compiler.ParseProgram(str);
 
-            compiler.TypeCheck();
+            var typePassed = compiler.TypeCheck();
         }
     }
 }
