@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace TheLang.Semantics.TypeChecking.Types
 {
-    public class ProcedureType : NameableType
+    public class ProcedureType : BaseType
     {
         protected bool Equals(ProcedureType other) 
             => base.Equals(other) && Equals(Return, other.Return) && Arguments.SequenceEqual(other.Arguments);
@@ -30,8 +30,8 @@ namespace TheLang.Semantics.TypeChecking.Types
 
         public override string ToString() => $"proc({string.Join(", ", Arguments)})->{Return}";
 
-        public ProcedureType(string name, IEnumerable<Argument> arguments, BaseType returnType)
-            : base(64, name)
+        public ProcedureType(IEnumerable<Argument> arguments, BaseType returnType)
+            : base(64)
         {
             Arguments = arguments;
             Return = returnType;

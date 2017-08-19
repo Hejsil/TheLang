@@ -114,7 +114,7 @@ namespace TheLang.Semantics.TypeChecking
             if (!Visit(node.Return)) return false;
 
             // TODO: Cache procedure types?
-            node.TypeInfo = Cache.GetType(new ProcedureType(null, arguments, node.Return.TypeInfo));
+            node.TypeInfo = Cache.GetType(new ProcedureType(arguments, node.Return.TypeInfo));
             return true;
         }
 
@@ -172,7 +172,7 @@ namespace TheLang.Semantics.TypeChecking
             var ret = node.Return;
             if (ret == null)
             {
-                node.TypeInfo = new ProcedureType(null, arguments, Cache.GetVoid());
+                node.TypeInfo = new ProcedureType(arguments, Cache.GetVoid());
             }
             else if (Visit(ret))
             {
@@ -182,7 +182,7 @@ namespace TheLang.Semantics.TypeChecking
                     return false;
                 }
 
-                node.TypeInfo = new ProcedureType(null, arguments, c.Type);
+                node.TypeInfo = new ProcedureType(arguments, c.Type);
             }
             else
             {

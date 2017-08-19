@@ -41,7 +41,7 @@ namespace TheLang
             Functions.Add("print",
                 new BuiltIn(
                     BuiltIn.Kind.Print,
-                    new ProcedureType(null,
+                    new ProcedureType(
                         new []
                         {
                             new ProcedureType.Argument("format_string", TypeCache.GetString()),
